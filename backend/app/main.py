@@ -14,15 +14,15 @@ from app.schemas import (
 )
 from app.services.markdown_exporter import export_video_to_markdown
 from app.services.qa_engine import answer_question
-from app.services.summarizer import generate_mock_summary
+from app.services.summarizer import generate_summary
 from app.services.transcript_chunker import chunk_transcript
 from app.services.transcript_cleaner import clean_transcript
 from app.storage.video_store import get_video, list_videos, save_video
 
 app = FastAPI(
     title="izuna-video-lab",
-    description="Manual transcript cleaning, chunking, mock summarization, keyword Q&A, and Markdown export API.",
-    version="0.1.4",
+    description="Manual transcript cleaning, chunking, rule-based summarization, keyword Q&A, and Markdown export API.",
+    version="0.1.5",
 )
 
 
@@ -35,7 +35,7 @@ def health_check() -> dict[str, str]:
 def process_video(payload: ProcessVideoRequest) -> ProcessVideoResponse:
     cleaned_transcript = clean_transcript(payload.transcript)
     chunks = chunk_transcript(cleaned_transcript)
-    summary = generate_mock_summary(cleaned_transcript, chunks)
+    summary = generate_summary(cleaned_transcript, chunks, payload.language)
     video_id = str(uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
 

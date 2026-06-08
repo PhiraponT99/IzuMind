@@ -1,65 +1,289 @@
+import re
 from typing import Any
 
-TLDR_MAX_CHARS = 300
+TLDR_MAX_CHARS = 360
 IDEA_MAX_CHARS = 180
+TAKEAWAY_MAX_CHARS = 150
+SNIPPET_MAX_CHARS = 220
+
+SENTENCE_END_PATTERN = re.compile(r"(?<=[.!?。！？ฯ])\s+")
+SPACE_PATTERN = re.compile(r"\s+")
+
+
+def generate_summary(
+    cleaned_transcript: str,
+    chunks: list[Any],
+    language: str = "thai",
+) -> dict:
+    transcript = _normalize_spaces(cleaned_transcript)
+    chunk_texts = [_get_chunk_text(chunk) for chunk in chunks]
+    chunk_texts = [text for text in chunk_texts if text]
+    main_sentences = extract_main_sentences(transcript, chunk_texts, max_items=5)
+
+    if _is_thai(language):
+        return _generate_thai_summary(transcript, main_sentences)
+
+    return _generate_english_summary(transcript, main_sentences)
 
 
 def generate_mock_summary(cleaned_transcript: str, chunks: list[Any]) -> dict:
-    transcript = cleaned_transcript.strip()
-    chunk_texts = [_get_chunk_text(chunk) for chunk in chunks]
-    chunk_texts = [text for text in chunk_texts if text]
-
-    return {
-        "tldr": _preview(transcript, TLDR_MAX_CHARS),
-        "main_ideas": _build_main_ideas(transcript, chunk_texts),
-        "key_takeaways": _build_key_takeaways(transcript, chunk_texts),
-        "action_items": [
-            "Review the generated chunks and refine any transcript sections that need more context.",
-            "Use the main ideas as a starting point before replacing this mock summary with an LLM-backed summary.",
-        ],
-        "questions_to_think": [
-            "Which parts of the transcript are most important for the target audience?",
-            "What follow-up topics or decisions should be explored after reading this transcript?",
-        ],
-    }
+    return generate_summary(cleaned_transcript, chunks, language="english")
 
 
-def _get_chunk_text(chunk: Any) -> str:
-    if isinstance(chunk, dict):
-        return str(chunk.get("text", "")).strip()
-
-    return str(getattr(chunk, "text", "")).strip()
-
-
-def _build_main_ideas(transcript: str, chunk_texts: list[str]) -> list[str]:
-    if not transcript:
+def split_sentences(text: str) -> list[str]:
+    normalized = _normalize_spaces(text)
+    if not normalized:
         return []
 
-    ideas = []
-    for index, chunk_text in enumerate(chunk_texts[:3], start=1):
-        ideas.append(f"Chunk {index}: {_preview(chunk_text, IDEA_MAX_CHARS)}")
+    parts = [part.strip() for part in SENTENCE_END_PATTERN.split(normalized)]
+    sentences = [part for part in parts if part]
 
-    if not ideas:
-        ideas.append(_preview(transcript, IDEA_MAX_CHARS))
+    if len(sentences) > 1:
+        return sentences
 
-    return ideas
-
-
-def _build_key_takeaways(transcript: str, chunk_texts: list[str]) -> list[str]:
-    if not transcript:
-        return []
-
-    chunk_count = len(chunk_texts) or 1
-    return [
-        f"The transcript covers a topic across {chunk_count} processed chunk(s).",
-        "The cleaned text is ready for manual review or a future LLM summarization step.",
-        f"The opening context is: {_preview(transcript, 140)}",
-    ]
+    return _split_long_text(normalized, SNIPPET_MAX_CHARS)
 
 
-def _preview(text: str, max_chars: int) -> str:
-    normalized = " ".join(text.split())
+def truncate_text(text: str, max_chars: int) -> str:
+    normalized = _normalize_spaces(text)
     if len(normalized) <= max_chars:
         return normalized
 
     return f"{normalized[: max_chars - 3].rstrip()}..."
+
+
+def extract_main_sentences(
+    text: str,
+    chunks: list[str] | None = None,
+    max_items: int = 3,
+) -> list[str]:
+    candidates = split_sentences(text)
+
+    if len(candidates) < max_items and chunks:
+        for chunk_text in chunks:
+            candidates.extend(split_sentences(chunk_text))
+
+    seen = set()
+    unique_candidates = []
+    for candidate in candidates:
+        normalized = _normalize_spaces(candidate)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_candidates.append(normalized)
+
+    unique_candidates.sort(key=_sentence_score, reverse=True)
+    selected = unique_candidates[:max_items]
+
+    if not selected and text:
+        selected = [truncate_text(text, SNIPPET_MAX_CHARS)]
+
+    return selected
+
+
+def _generate_thai_summary(transcript: str, main_sentences: list[str]) -> dict:
+    if not transcript:
+        return {
+            "tldr": "ยังไม่มีเนื้อหาสำหรับสรุป",
+            "main_ideas": [],
+            "key_takeaways": [],
+            "action_items": [],
+            "questions_to_think": [],
+        }
+
+    main_ideas = _build_thai_main_ideas(main_sentences)
+    takeaways = _build_thai_takeaways(main_sentences)
+
+    return {
+        "tldr": _build_thai_tldr(main_sentences, transcript),
+        "main_ideas": main_ideas,
+        "key_takeaways": takeaways,
+        "action_items": _build_thai_action_items(main_sentences),
+        "questions_to_think": _build_thai_questions(main_sentences),
+    }
+
+
+def _generate_english_summary(transcript: str, main_sentences: list[str]) -> dict:
+    if not transcript:
+        return {
+            "tldr": "No transcript content is available to summarize.",
+            "main_ideas": [],
+            "key_takeaways": [],
+            "action_items": [],
+            "questions_to_think": [],
+        }
+
+    main_ideas = _build_english_main_ideas(main_sentences)
+    takeaways = _build_english_takeaways(main_sentences)
+
+    return {
+        "tldr": _build_english_tldr(main_sentences, transcript),
+        "main_ideas": main_ideas,
+        "key_takeaways": takeaways,
+        "action_items": _build_english_action_items(main_sentences),
+        "questions_to_think": _build_english_questions(main_sentences),
+    }
+
+
+def _build_thai_tldr(main_sentences: list[str], transcript: str) -> str:
+    selected = main_sentences[:2] or [transcript]
+    if len(selected) == 1:
+        return truncate_text(f"วิดีโอนี้พูดถึง {selected[0]}", TLDR_MAX_CHARS)
+
+    return truncate_text(
+        f"วิดีโอนี้พูดถึง {selected[0]} ประเด็นสำคัญอีกส่วนคือ {selected[1]}",
+        TLDR_MAX_CHARS,
+    )
+
+
+def _build_english_tldr(main_sentences: list[str], transcript: str) -> str:
+    selected = main_sentences[:2] or [transcript]
+    if len(selected) == 1:
+        return truncate_text(f"This video discusses {selected[0]}", TLDR_MAX_CHARS)
+
+    return truncate_text(
+        f"This video discusses {selected[0]} It also highlights {selected[1]}",
+        TLDR_MAX_CHARS,
+    )
+
+
+def _build_thai_main_ideas(main_sentences: list[str]) -> list[str]:
+    prefixes = ["พูดถึง", "อธิบายว่า", "ชี้ให้เห็นว่า", "เน้นว่า", "ยกประเด็นว่า"]
+    return [
+        f"{prefixes[index % len(prefixes)]} {truncate_text(sentence, IDEA_MAX_CHARS)}"
+        for index, sentence in enumerate(main_sentences[:5])
+    ]
+
+
+def _build_english_main_ideas(main_sentences: list[str]) -> list[str]:
+    prefixes = ["Discusses", "Explains", "Highlights", "Emphasizes", "Raises the point that"]
+    return [
+        f"{prefixes[index % len(prefixes)]} {truncate_text(sentence, IDEA_MAX_CHARS)}"
+        for index, sentence in enumerate(main_sentences[:5])
+    ]
+
+
+def _build_thai_takeaways(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 3)
+    return [
+        f"ควรให้ความสำคัญกับ {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)}",
+        f"ปัญหาสำคัญคือ {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)}",
+        f"แนวทางที่นำไปใช้ได้คือ {truncate_text(selected[2], TAKEAWAY_MAX_CHARS)}",
+    ]
+
+
+def _build_english_takeaways(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 3)
+    return [
+        f"Pay attention to: {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)}",
+        f"A key issue is: {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)}",
+        f"A practical direction is: {truncate_text(selected[2], TAKEAWAY_MAX_CHARS)}",
+    ]
+
+
+def _build_thai_action_items(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 3)
+    return [
+        f"ทบทวนประเด็นเรื่อง {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)}",
+        f"ลองนำแนวคิดเรื่อง {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)} ไปใช้กับงานจริง",
+        f"จดคำถามต่อยอดจากประเด็น {truncate_text(selected[2], TAKEAWAY_MAX_CHARS)}",
+    ]
+
+
+def _build_english_action_items(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 3)
+    return [
+        f"Review the point about {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)}",
+        f"Try applying the idea of {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)} to real work.",
+        f"Write one follow-up question about {truncate_text(selected[2], TAKEAWAY_MAX_CHARS)}",
+    ]
+
+
+def _build_thai_questions(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 2)
+    return [
+        f"ประเด็นเรื่อง {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)} เกี่ยวข้องกับงานหรือชีวิตประจำวันของเราอย่างไร?",
+        f"มีจุดไหนจากเรื่อง {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)} ที่ควรศึกษาเพิ่มเติม?",
+    ]
+
+
+def _build_english_questions(main_sentences: list[str]) -> list[str]:
+    selected = _pad_items(main_sentences, 2)
+    return [
+        f"How does the point about {truncate_text(selected[0], TAKEAWAY_MAX_CHARS)} connect to daily work or study?",
+        f"What should be explored further from {truncate_text(selected[1], TAKEAWAY_MAX_CHARS)}?",
+    ]
+
+
+def _get_chunk_text(chunk: Any) -> str:
+    if isinstance(chunk, dict):
+        return _normalize_spaces(str(chunk.get("text", "")))
+
+    return _normalize_spaces(str(getattr(chunk, "text", "")))
+
+
+def _split_long_text(text: str, max_chars: int) -> list[str]:
+    words = text.split(" ")
+    if len(words) == 1:
+        return [
+            text[start : start + max_chars].strip()
+            for start in range(0, len(text), max_chars)
+            if text[start : start + max_chars].strip()
+        ]
+
+    snippets = []
+    current = ""
+    for word in words:
+        candidate = word if not current else f"{current} {word}"
+        if len(candidate) <= max_chars:
+            current = candidate
+            continue
+
+        if current:
+            snippets.append(current)
+        current = word
+
+    if current:
+        snippets.append(current)
+
+    return snippets
+
+
+def _sentence_score(sentence: str) -> int:
+    score = min(len(sentence), 260)
+    lowered = sentence.lower()
+    for marker in (
+        "คือ",
+        "ปัญหา",
+        "ควร",
+        "สำคัญ",
+        "เพราะ",
+        "deep work",
+        "problem",
+        "should",
+        "important",
+        "because",
+        "focus",
+    ):
+        if marker in lowered:
+            score += 80
+    return score
+
+
+def _pad_items(items: list[str], count: int) -> list[str]:
+    if not items:
+        return ["เนื้อหาหลักของ transcript"] * count
+
+    padded = list(items)
+    while len(padded) < count:
+        padded.append(padded[-1])
+
+    return padded[:count]
+
+
+def _normalize_spaces(text: str) -> str:
+    return SPACE_PATTERN.sub(" ", text).strip()
+
+
+def _is_thai(language: str) -> bool:
+    return language.lower().strip() == "thai"

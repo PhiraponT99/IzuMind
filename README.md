@@ -8,6 +8,8 @@ V1.3 adds local JSON storage and deterministic keyword-based Q&A from saved tran
 
 V1.4 adds Markdown export for saved processed videos.
 
+V1.5 replaces the generic mock summary with an improved deterministic rule-based summary. It is still not LLM summarization; it only uses the cleaned transcript and chunks.
+
 ## Project Structure
 
 ```text
@@ -56,6 +58,20 @@ Stored video records include:
   "created_at": "ISO datetime string"
 }
 ```
+
+## Rule-based Summary
+
+The summary returned by `POST /api/videos/process` is deterministic and based only on transcript text. It does not call OpenAI, an external LLM API, embeddings, or a vector database.
+
+For Thai videos, generated summary content uses Thai wording for:
+
+- TL;DR
+- Main ideas
+- Key takeaways
+- Action items
+- Questions to think
+
+For English videos, generated summary content uses natural English wording.
 
 ## Setup on Windows PowerShell
 
@@ -310,3 +326,33 @@ Expected result:
 - HTTP 200
 - Response content type is Markdown text
 - Response body includes the title, summary sections, and transcript chunks
+
+## Swagger UI V1.5 Thai Summary Test Flow
+
+1. Start the server:
+
+```powershell
+uvicorn app.main:app --reload --app-dir backend
+```
+
+2. Open Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+3. Expand `POST /api/videos/process`, click `Try it out`, and submit:
+
+```json
+{
+  "title": "Deep Work Test",
+  "source_url": "https://youtube.com/test",
+  "language": "thai",
+  "transcript": "00:01 วันนี้เราจะพูดถึง deep work 00:05 deep work คือการทำงานแบบมีสมาธิลึกและไม่ถูกรบกวน 00:10 ปัญหาของยุคนี้คือมือถือ notification และ social media ทำให้เราหลุดโฟกัสบ่อย 00:15 เมื่อเราเช็กมือถือ สมองจะได้รับ dopamine สั้น ๆ ทำให้เราติดการสลับความสนใจ 00:20 ถ้าอยากทำงานลึก เราควรปิด notification วางมือถือให้ไกล และกำหนดช่วงเวลาทำงานที่ชัดเจน"
+}
+```
+
+4. Confirm the response summary is Thai and does not contain generic English placeholder text.
+5. Copy the returned `video_id`.
+6. Use `GET /api/videos/{video_id}/export/markdown`.
+7. Confirm the Markdown includes Thai TL;DR, main ideas, key takeaways, action items, questions to think, and transcript chunks.

@@ -33,6 +33,7 @@ Personal Knowledge Base
 - [x] V1.2 Local storage
 - [x] V1.3 Ask Q&A from chunks
 - [x] V1.4 Export Markdown summary
+- [x] V1.5 Improved Thai rule-based summary
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -41,10 +42,12 @@ Personal Knowledge Base
 - V1.2 Local JSON storage
 - V1.3 Simple Q&A from chunks
 - V1.4 Export Markdown summary
+- V1.5 Improved Thai rule-based summary
 
 ## 5. Phase 2: Better Summarization
 
 - Replace mock summary with real LLM summarization
+- Keep real LLM summarization as a future phase, after the deterministic pipeline is stable
 - Add summary styles: short, study_note, deep
 - Add structured output: TLDR, main ideas, key takeaways, action items, questions to think
 

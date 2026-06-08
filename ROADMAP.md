@@ -34,6 +34,7 @@ Personal Knowledge Base
 - [x] V1.3 Ask Q&A from chunks
 - [x] V1.4 Export Markdown summary
 - [x] V1.5 Improved Thai rule-based summary
+- [x] V1.6 Regression tests
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -43,6 +44,7 @@ Personal Knowledge Base
 - V1.3 Simple Q&A from chunks
 - V1.4 Export Markdown summary
 - V1.5 Improved Thai rule-based summary
+- V1.6 Regression tests
 
 ## 5. Phase 2: Better Summarization
 

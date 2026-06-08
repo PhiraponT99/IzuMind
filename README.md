@@ -102,6 +102,24 @@ Open the health endpoint:
 curl.exe http://127.0.0.1:8000/
 ```
 
+## Testing
+
+From the project root:
+
+```powershell
+cd backend
+python -m pytest
+```
+
+The regression tests cover:
+
+- Transcript cleaning
+- Transcript chunking
+- Thai rule-based summarization
+- Full API processing pipeline
+- Q&A from saved chunks
+- Markdown export
+
 ## Test Transcript Processing
 
 ```powershell

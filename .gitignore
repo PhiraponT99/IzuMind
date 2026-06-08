@@ -5,3 +5,9 @@ __pycache__/
 .env
 .env.*
 backend/data/videos.json
+
+# pytest
+.pytest_cache/
+.pytest_tmp/
+backend/.pytest_cache/
+backend/.pytest_tmp/

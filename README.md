@@ -6,6 +6,8 @@ V1.1 adds deterministic mock summarization. It does not call an external LLM API
 
 V1.3 adds local JSON storage and deterministic keyword-based Q&A from saved transcript chunks.
 
+V1.4 adds Markdown export for saved processed videos.
+
 ## Project Structure
 
 ```text
@@ -16,6 +18,7 @@ backend/
     schemas.py
     services/
       __init__.py
+      markdown_exporter.py
       qa_engine.py
       summarizer.py
       transcript_cleaner.py
@@ -210,6 +213,38 @@ Expected response shape:
 
 The Q&A engine is deterministic and keyword-based. It does not use embeddings, vector search, OpenAI, or any external LLM API.
 
+## Export Markdown
+
+Replace `<video_id>` with an ID returned by `POST /api/videos/process` or `GET /api/videos`:
+
+```powershell
+curl.exe "http://127.0.0.1:8000/api/videos/<video_id>/export/markdown"
+```
+
+The endpoint returns `text/markdown` and includes:
+
+- Title
+- Source URL
+- Language
+- Created at
+- TL;DR
+- Main ideas
+- Key takeaways
+- Action items
+- Questions to think
+- Transcript chunks
+
+You can also test it directly in a browser:
+
+```text
+http://127.0.0.1:8000/api/videos/<video_id>/export/markdown
+```
+
+To use the output in Obsidian or Notion:
+
+- Obsidian: copy the Markdown response and paste it into a new `.md` note.
+- Notion: copy the Markdown response and paste it into a Notion page; Notion will convert headings and bullet lists.
+
 ## Swagger UI V1.3 Test Flow
 
 1. Start the server:
@@ -251,3 +286,27 @@ Expected result:
 - HTTP 200
 - `answer` explains that it is based on simple keyword matching
 - `related_chunks` contains at least one chunk when the transcript includes matching terms
+
+## Swagger UI V1.4 Markdown Export Test Flow
+
+1. Start the server:
+
+```powershell
+uvicorn app.main:app --reload --app-dir backend
+```
+
+2. Open Swagger UI:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+3. Use `GET /api/videos` to find a saved `video_id`.
+4. Expand `GET /api/videos/{video_id}/export/markdown`.
+5. Click `Try it out`, paste the `video_id`, and click `Execute`.
+
+Expected result:
+
+- HTTP 200
+- Response content type is Markdown text
+- Response body includes the title, summary sections, and transcript chunks

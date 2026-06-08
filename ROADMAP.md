@@ -32,6 +32,7 @@ Personal Knowledge Base
 - [x] V1.1 Mock summary
 - [x] V1.2 Local storage
 - [x] V1.3 Ask Q&A from chunks
+- [x] V1.4 Export Markdown summary
 
 ## 4. Phase 1: Manual Transcript MVP
 

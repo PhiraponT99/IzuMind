@@ -35,6 +35,7 @@ Personal Knowledge Base
 - [x] V1.4 Export Markdown summary
 - [x] V1.5 Improved Thai rule-based summary
 - [x] V1.6 Regression tests
+- [x] V2.0 Minimal LLM summarization integration
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -48,8 +49,8 @@ Personal Knowledge Base
 
 ## 5. Phase 2: Better Summarization
 
-- Replace mock summary with real LLM summarization
-- Keep real LLM summarization as a future phase, after the deterministic pipeline is stable
+- [x] Add optional real LLM summarization
+- Keep broader LLM summarization improvements as future work after the deterministic pipeline remains stable
 - Add summary styles: short, study_note, deep
 - Add structured output: TLDR, main ideas, key takeaways, action items, questions to think
 

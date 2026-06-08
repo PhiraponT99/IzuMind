@@ -1,5 +1,8 @@
 import re
+import logging
 from typing import Any
+
+from app.config import get_settings
 
 TLDR_MAX_CHARS = 360
 IDEA_MAX_CHARS = 180
@@ -8,6 +11,7 @@ SNIPPET_MAX_CHARS = 220
 
 SENTENCE_END_PATTERN = re.compile(r"(?<=[.!?。！？ฯ])\s+")
 SPACE_PATTERN = re.compile(r"\s+")
+LOGGER = logging.getLogger(__name__)
 
 THAI_USEFUL_KEYWORDS = (
     "คือ",
@@ -31,6 +35,23 @@ THAI_WEAK_INTRO_PATTERNS = (
 
 
 def generate_summary(
+    cleaned_transcript: str,
+    chunks: list[Any],
+    language: str = "thai",
+) -> dict:
+    settings = get_settings()
+    if settings.should_use_openai_summary:
+        try:
+            from app.services.llm_summarizer import generate_llm_summary
+
+            return generate_llm_summary(cleaned_transcript, chunks, language)
+        except Exception as exc:
+            LOGGER.warning("OpenAI summarization failed; falling back to rule-based summary: %s", exc)
+
+    return generate_rule_based_summary(cleaned_transcript, chunks, language)
+
+
+def generate_rule_based_summary(
     cleaned_transcript: str,
     chunks: list[Any],
     language: str = "thai",

@@ -10,6 +10,8 @@ V1.4 adds Markdown export for saved processed videos.
 
 V1.5 replaces the generic mock summary with an improved deterministic rule-based summary. It is still not LLM summarization; it only uses the cleaned transcript and chunks.
 
+V2.0 adds optional OpenAI-powered LLM summarization behind environment config. The default remains `rule_based`, and missing or failing OpenAI config falls back to the rule-based summarizer.
+
 ## Project Structure
 
 ```text
@@ -73,6 +75,37 @@ For Thai videos, generated summary content uses Thai wording for:
 
 For English videos, generated summary content uses natural English wording.
 
+## Optional LLM Summarization
+
+Default mode is rule-based:
+
+```text
+SUMMARY_PROVIDER=rule_based
+```
+
+To configure optional OpenAI summarization, create a local `.env` file from the example:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env`:
+
+```text
+OPENAI_API_KEY=your_real_api_key
+OPENAI_MODEL=your_model
+SUMMARY_PROVIDER=openai
+```
+
+Do not commit `.env` or real secrets. The repository includes `.env.example` only.
+
+Behavior:
+
+- `SUMMARY_PROVIDER=rule_based` always uses the deterministic local summarizer.
+- `SUMMARY_PROVIDER=openai` uses OpenAI only when both `OPENAI_API_KEY` and `OPENAI_MODEL` are set.
+- If OpenAI config is missing or the API request fails, `POST /api/videos/process` falls back to the rule-based summarizer instead of crashing.
+- OpenAI summarization is grounded in the cleaned transcript and asks the model to return the existing summary JSON structure.
+
 ## Setup on Windows PowerShell
 
 From the project root:
@@ -119,6 +152,7 @@ The regression tests cover:
 - Full API processing pipeline
 - Q&A from saved chunks
 - Markdown export
+- Optional LLM config fallback behavior
 
 ## Test Transcript Processing
 

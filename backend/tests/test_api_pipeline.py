@@ -24,6 +24,9 @@ THAI_DEEP_WORK_REQUEST = {
 
 @pytest.fixture()
 def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("SUMMARY_PROVIDER", "rule_based")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.setattr(video_store, "DATA_DIR", tmp_path)
     monkeypatch.setattr(video_store, "VIDEOS_FILE", tmp_path / "videos.json")
     monkeypatch.setattr(main_app, "save_video", video_store.save_video)

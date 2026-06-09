@@ -36,6 +36,10 @@ Personal Knowledge Base
 - [x] V1.5 Improved Thai rule-based summary
 - [x] V1.6 Regression tests
 - [x] V2.0 Minimal LLM summarization integration
+- [x] V2.1 OpenAI real smoke test support
+- [x] V2.1.1 Config restructure and .env support
+- [x] V2.1.2 OpenAI provider debug and .env-first config restructure
+- [x] V2.2 Ollama local LLM provider
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -50,6 +54,10 @@ Personal Knowledge Base
 ## 5. Phase 2: Better Summarization
 
 - [x] Add optional real LLM summarization
+- [x] Add provider metadata for OpenAI smoke testing
+- [x] Add project-root .env config support
+- [x] Add safe OpenAI config debug and smoke-test endpoint
+- [x] Add local Ollama provider and smoke-test endpoint
 - Keep broader LLM summarization improvements as future work after the deterministic pipeline remains stable
 - Add summary styles: short, study_note, deep
 - Add structured output: TLDR, main ideas, key takeaways, action items, questions to think

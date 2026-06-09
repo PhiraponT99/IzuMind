@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 Language = Literal["thai", "english"]
+SummaryProvider = Literal["rule_based", "openai", "ollama"]
 
 
 class ProcessVideoRequest(BaseModel):
@@ -54,6 +55,8 @@ class ProcessVideoResponse(BaseModel):
     cleaned_transcript: str
     chunks: list[TranscriptChunk]
     summary: Summary
+    summary_provider: SummaryProvider
+    summary_fallback_used: bool
 
 
 class AskVideoRequest(BaseModel):
@@ -80,3 +83,38 @@ class VideoListItem(BaseModel):
     source_url: str | None
     language: Language
     created_at: str
+
+
+class ConfigResponse(BaseModel):
+    summary_provider: SummaryProvider
+    openai_model: str | None
+    openai_api_key_present: bool
+    openai_model_present: bool
+    openai_config_valid: bool
+    ollama_base_url: str | None
+    ollama_model: str | None
+    ollama_base_url_present: bool
+    ollama_model_present: bool
+    ollama_config_valid: bool
+    env_file_exists: bool
+    env_file_path: str
+
+
+class OpenAISmokeTestResponse(BaseModel):
+    ok: bool
+    stage: Literal["config", "openai_call", "json_parse"]
+    message: str
+    openai_api_key_present: bool | None = None
+    openai_model: str | None = None
+    model: str | None = None
+    output_preview: str | None = None
+
+
+class OllamaSmokeTestResponse(BaseModel):
+    ok: bool
+    stage: Literal["config", "ollama_call", "json_parse"]
+    message: str
+    ollama_base_url: str | None = None
+    ollama_model: str | None = None
+    model: str | None = None
+    output_preview: str | None = None

@@ -12,3 +12,5 @@ backend/data/videos.json
 .pytest_tmp/
 backend/.pytest_cache/
 backend/.pytest_tmp/
+.test_tmp/
+backend/.test_tmp/

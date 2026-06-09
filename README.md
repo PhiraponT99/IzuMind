@@ -12,17 +12,28 @@ V1.5 replaces the generic mock summary with an improved deterministic rule-based
 
 V2.0 adds optional OpenAI-powered LLM summarization behind environment config. The default remains `rule_based`, and missing or failing OpenAI config falls back to the rule-based summarizer.
 
+V2.1 adds response metadata so smoke tests can confirm whether a summary came from OpenAI or the rule-based fallback.
+
+V2.1.1 loads local development config from a project-root `.env` file while still allowing environment variables to override `.env` values.
+
+V2.1.2 adds safe OpenAI debug visibility with `GET /api/config` and a minimal `GET /api/llm/openai/smoke-test` endpoint. These endpoints never return the API key.
+
+V2.2 adds optional Ollama-powered local LLM summarization using the local Ollama chat API. The default remains `rule_based`, and Ollama failures fall back to the rule-based summarizer.
+
 ## Project Structure
 
 ```text
 backend/
   app/
     __init__.py
+    config.py
     main.py
     schemas.py
     services/
       __init__.py
+      llm_summarizer.py
       markdown_exporter.py
+      ollama_summarizer.py
       qa_engine.py
       summarizer.py
       transcript_cleaner.py
@@ -83,7 +94,13 @@ Default mode is rule-based:
 SUMMARY_PROVIDER=rule_based
 ```
 
-To configure optional OpenAI summarization, create a local `.env` file from the example:
+Supported providers:
+
+- `rule_based`
+- `openai`
+- `ollama`
+
+To configure optional LLM summarization, create a local `.env` file from the example:
 
 ```powershell
 Copy-Item .env.example .env
@@ -97,14 +114,266 @@ OPENAI_MODEL=your_model
 SUMMARY_PROVIDER=openai
 ```
 
+For local Ollama summarization:
+
+```text
+SUMMARY_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+```
+
 Do not commit `.env` or real secrets. The repository includes `.env.example` only.
 
 Behavior:
 
 - `SUMMARY_PROVIDER=rule_based` always uses the deterministic local summarizer.
 - `SUMMARY_PROVIDER=openai` uses OpenAI only when both `OPENAI_API_KEY` and `OPENAI_MODEL` are set.
+- `SUMMARY_PROVIDER=ollama` uses local Ollama only when both `OLLAMA_BASE_URL` and `OLLAMA_MODEL` are set.
 - If OpenAI config is missing or the API request fails, `POST /api/videos/process` falls back to the rule-based summarizer instead of crashing.
+- If Ollama config is missing or the local API request fails, `POST /api/videos/process` falls back to the rule-based summarizer instead of crashing.
 - OpenAI summarization is grounded in the cleaned transcript and asks the model to return the existing summary JSON structure.
+- Ollama summarization uses `POST {OLLAMA_BASE_URL}/api/chat` with `stream=false` and asks the local model to return the same summary JSON structure.
+
+`POST /api/videos/process` includes provider metadata:
+
+```json
+{
+  "summary_provider": "rule_based",
+  "summary_fallback_used": false
+}
+```
+
+## Local .env Configuration
+
+From the project root, create a local `.env` file:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env`:
+
+```text
+SUMMARY_PROVIDER=openai
+OPENAI_API_KEY=your_real_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Run the API:
+
+```powershell
+cd backend
+python -m uvicorn app.main:app --reload
+```
+
+Check config visibility:
+
+```text
+GET /api/config
+```
+
+The response never returns the API key:
+
+```json
+{
+  "summary_provider": "openai",
+  "openai_model": "gpt-4.1-mini",
+  "openai_api_key_present": true,
+  "openai_model_present": true,
+  "openai_config_valid": true,
+  "ollama_base_url": "http://localhost:11434",
+  "ollama_model": "qwen2.5:3b",
+  "ollama_base_url_present": true,
+  "ollama_model_present": true,
+  "ollama_config_valid": true,
+  "env_file_exists": true,
+  "env_file_path": "D:\\Codex\\izuna-video-lab\\.env"
+}
+```
+
+Then test:
+
+```text
+POST /api/videos/process
+```
+
+Expected OpenAI success:
+
+```json
+{
+  "summary_provider": "openai",
+  "summary_fallback_used": false
+}
+```
+
+Expected fallback:
+
+```json
+{
+  "summary_provider": "rule_based",
+  "summary_fallback_used": true
+}
+```
+
+Environment variables still override `.env` values. Do not commit `.env`, `.env.local`, or real API keys.
+
+## Local Ollama Summarization
+
+Make sure Ollama is running locally and the model exists:
+
+```powershell
+ollama pull qwen2.5:3b
+```
+
+Configure `.env`:
+
+```text
+SUMMARY_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+```
+
+Run the API:
+
+```powershell
+cd backend
+python -m uvicorn app.main:app --reload
+```
+
+Check safe config metadata:
+
+```text
+GET /api/config
+```
+
+Run the Ollama smoke test:
+
+```text
+GET /api/llm/ollama/smoke-test
+```
+
+Then call:
+
+```text
+POST /api/videos/process
+```
+
+Expected Ollama success:
+
+```json
+{
+  "summary_provider": "ollama",
+  "summary_fallback_used": false
+}
+```
+
+Expected fallback:
+
+```json
+{
+  "summary_provider": "rule_based",
+  "summary_fallback_used": true
+}
+```
+
+If `/api/config` is valid but `/api/llm/ollama/smoke-test` fails, check that Ollama is running at `OLLAMA_BASE_URL` and that `OLLAMA_MODEL` is installed.
+
+## Debugging OpenAI Integration
+
+Create local config from the project root:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Edit `.env`:
+
+```text
+SUMMARY_PROVIDER=openai
+OPENAI_API_KEY=your_real_api_key_here
+OPENAI_MODEL=gpt-4.1-mini
+```
+
+Run the API:
+
+```powershell
+cd backend
+python -m uvicorn app.main:app --reload
+```
+
+Check safe config metadata:
+
+```text
+GET /api/config
+```
+
+Run the minimal OpenAI smoke test:
+
+```text
+GET /api/llm/openai/smoke-test
+```
+
+This endpoint sends a tiny request asking OpenAI to return `{"ok": true, "message": "pong"}`. It may incur a small API usage charge. It never returns `OPENAI_API_KEY`.
+
+Interpretation:
+
+- `GET /api/config` has `openai_config_valid = false`: `.env` or environment variables are missing `OPENAI_API_KEY` or `OPENAI_MODEL`.
+- `GET /api/config` has `openai_config_valid = true`, but smoke test returns `ok = false` with `stage = "openai_call"`: the model name, key permissions, quota, network, or OpenAI call is failing.
+- Smoke test returns `ok = true`, but `POST /api/videos/process` falls back to `summary_provider = "rule_based"` and `summary_fallback_used = true`: the OpenAI summary call likely failed during summary generation or JSON parsing. Check the terminal logs for the safe fallback reason.
+
+Then test normal processing:
+
+```text
+POST /api/videos/process
+```
+
+Expected OpenAI success:
+
+```json
+{
+  "summary_provider": "openai",
+  "summary_fallback_used": false
+}
+```
+
+Expected fallback:
+
+```json
+{
+  "summary_provider": "rule_based",
+  "summary_fallback_used": true
+}
+```
+
+## V2.1 OpenAI Smoke Test
+
+Use environment variables only. Do not commit `.env` files or API keys.
+
+Rule-based mode:
+
+```powershell
+cd backend
+$env:SUMMARY_PROVIDER="rule_based"
+python -m uvicorn app.main:app --reload
+```
+
+OpenAI mode:
+
+```powershell
+cd backend
+$env:SUMMARY_PROVIDER="openai"
+$env:OPENAI_API_KEY="your_real_api_key_here"
+$env:OPENAI_MODEL="gpt-5.4-mini"
+python -m uvicorn app.main:app --reload
+```
+
+If `OPENAI_MODEL` is unavailable for your account, use another available OpenAI model from your dashboard.
+
+Then call `POST /api/videos/process` and check:
+
+- `summary_provider = "openai"` and `summary_fallback_used = false` means OpenAI generated the summary.
+- `summary_provider = "rule_based"` and `summary_fallback_used = false` means rule-based mode was used directly.
+- `summary_provider = "rule_based"` and `summary_fallback_used = true` means OpenAI was requested but config was missing or the API call failed.
 
 ## Setup on Windows PowerShell
 
@@ -153,6 +422,8 @@ The regression tests cover:
 - Q&A from saved chunks
 - Markdown export
 - Optional LLM config fallback behavior
+- Summary provider smoke-test metadata
+- Safe OpenAI config and smoke-test debug endpoints
 
 ## Test Transcript Processing
 

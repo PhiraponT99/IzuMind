@@ -1,7 +1,11 @@
 import json
+import logging
 from typing import Any
 
 from app.config import Settings, get_settings
+
+LOGGER = logging.getLogger(__name__)
+MODEL_OUTPUT_PREVIEW_CHARS = 300
 
 SUMMARY_SCHEMA = {
     "type": "object",
@@ -35,32 +39,133 @@ def generate_llm_summary(
     return _generate_openai_summary(cleaned_transcript, chunks, language, settings)
 
 
+def run_openai_smoke_test() -> dict:
+    settings = get_settings()
+    if not settings.is_openai_config_valid:
+        LOGGER.warning(
+            "OpenAI config missing: requested_provider=%s model=%s api_key_present=%s "
+            "model_present=%s config_valid=%s",
+            settings.summary_provider,
+            settings.openai_model,
+            settings.openai_api_key_present,
+            settings.openai_model_present,
+            settings.is_openai_config_valid,
+        )
+        return {
+            "ok": False,
+            "stage": "config",
+            "message": "OpenAI config is invalid",
+            "openai_api_key_present": settings.openai_api_key_present,
+            "openai_model": settings.openai_model,
+        }
+
+    try:
+        output_text = _call_openai_for_text(
+            prompt='Return only this JSON: {"ok": true, "message": "pong"}',
+            settings=settings,
+        )
+    except Exception as exc:
+        LOGGER.warning(
+            "OpenAI smoke test call failed: provider=%s model=%s api_key_present=%s "
+            "config_valid=%s exception_class=%s exception_message=%s",
+            settings.summary_provider,
+            settings.openai_model,
+            settings.openai_api_key_present,
+            settings.is_openai_config_valid,
+            exc.__class__.__name__,
+            _safe_message(str(exc), settings.openai_api_key),
+        )
+        return {
+            "ok": False,
+            "stage": "openai_call",
+            "model": settings.openai_model,
+            "message": f"OpenAI call failed: {exc.__class__.__name__}",
+            "output_preview": None,
+        }
+
+    try:
+        parsed = json.loads(output_text)
+    except json.JSONDecodeError as exc:
+        LOGGER.warning(
+            "OpenAI smoke test JSON parse failed: exception_class=%s exception_message=%s "
+            "model_output_preview=%s",
+            exc.__class__.__name__,
+            _safe_message(str(exc), settings.openai_api_key),
+            _safe_model_output_preview(output_text, settings.openai_api_key),
+        )
+        return {
+            "ok": False,
+            "stage": "json_parse",
+            "model": settings.openai_model,
+            "message": "OpenAI smoke-test JSON parse failed",
+            "output_preview": _safe_model_output_preview(output_text, settings.openai_api_key),
+        }
+
+    return {
+        "ok": parsed.get("ok") is True,
+        "stage": "openai_call",
+        "model": settings.openai_model,
+        "message": str(parsed.get("message", "OpenAI smoke test completed")),
+        "output_preview": _safe_model_output_preview(output_text, settings.openai_api_key),
+    }
+
+
 def _generate_openai_summary(
     cleaned_transcript: str,
     chunks: list[Any],
     language: str,
     settings: Settings,
 ) -> dict:
+    output_text = _call_openai_for_text(
+        prompt=_build_prompt(cleaned_transcript, chunks, language),
+        settings=settings,
+        text_format={
+            "type": "json_schema",
+            "name": "video_summary",
+            "strict": True,
+            "schema": SUMMARY_SCHEMA,
+        },
+    )
+    try:
+        summary = json.loads(output_text)
+    except json.JSONDecodeError as exc:
+        LOGGER.warning(
+            "OpenAI summary JSON parse failed: exception_class=%s exception_message=%s "
+            "model_output_preview=%s",
+            exc.__class__.__name__,
+            _safe_message(str(exc), settings.openai_api_key),
+            _safe_model_output_preview(output_text, settings.openai_api_key),
+        )
+        raise
+
+    _validate_summary_shape(summary)
+    return summary
+
+
+def _call_openai_for_text(
+    prompt: str,
+    settings: Settings,
+    text_format: dict | None = None,
+) -> str:
     from openai import OpenAI
 
     client = OpenAI(api_key=settings.openai_api_key)
-    response = client.responses.create(
-        model=settings.openai_model,
-        input=_build_prompt(cleaned_transcript, chunks, language),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "video_summary",
-                "strict": True,
-                "schema": SUMMARY_SCHEMA,
-            }
-        },
-    )
+    kwargs = {
+        "model": settings.openai_model,
+        "input": prompt,
+    }
+    if text_format is not None:
+        kwargs["text"] = {"format": text_format}
 
-    output_text = getattr(response, "output_text", "")
-    summary = json.loads(output_text)
-    _validate_summary_shape(summary)
-    return summary
+    LOGGER.info(
+        "OpenAI request starting: provider=%s model=%s api_key_present=%s config_valid=%s",
+        settings.summary_provider,
+        settings.openai_model,
+        settings.openai_api_key_present,
+        settings.is_openai_config_valid,
+    )
+    response = client.responses.create(**kwargs)
+    return str(getattr(response, "output_text", ""))
 
 
 def _build_prompt(cleaned_transcript: str, chunks: list[Any], language: str) -> str:
@@ -108,3 +213,15 @@ def _validate_summary_shape(summary: dict) -> None:
             raise ValueError(f"LLM summary {key} must be a list.")
         if not all(isinstance(item, str) for item in summary[key]):
             raise ValueError(f"LLM summary {key} must contain only strings.")
+
+
+def _safe_model_output_preview(output_text: str, api_key: str | None) -> str:
+    preview = output_text[:MODEL_OUTPUT_PREVIEW_CHARS]
+    return _safe_message(preview, api_key)
+
+
+def _safe_message(message: str, api_key: str | None) -> str:
+    safe = str(message).replace("\n", " ").strip()
+    if api_key:
+        safe = safe.replace(api_key, "[redacted]")
+    return safe

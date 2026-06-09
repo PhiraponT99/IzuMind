@@ -6,6 +6,11 @@ __pycache__/
 .env.*
 !.env.example
 backend/data/videos.json
+backend/data/audio/
+backend/data/transcripts/
+*.wav
+*.mp3
+*.m4a
 
 # pytest
 .pytest_cache/

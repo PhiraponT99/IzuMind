@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+import importlib.util
 from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi import HTTPException
+from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
 
 from app.config import get_settings
@@ -14,15 +16,21 @@ from app.schemas import (
     OpenAISmokeTestResponse,
     ProcessVideoRequest,
     ProcessVideoResponse,
+    ProcessYouTubeVideoRequest,
+    ProcessYouTubeVideoResponse,
+    STTSmokeTestResponse,
     VideoListItem,
 )
 from app.services.llm_summarizer import run_openai_smoke_test
+from app.services.local_stt import LocalSTTError, transcribe_audio
 from app.services.markdown_exporter import export_video_to_markdown
 from app.services.ollama_summarizer import run_ollama_smoke_test
 from app.services.qa_engine import answer_question
 from app.services.summary_provider import generate_summary_with_metadata
 from app.services.transcript_chunker import chunk_transcript
 from app.services.transcript_cleaner import clean_transcript
+from app.services.youtube_caption_fetcher import TranscriptNotFoundError, fetch_youtube_transcript
+from app.services.youtube_audio_downloader import AudioDownloadError, download_youtube_audio
 from app.storage.video_store import get_video, list_videos, save_video
 
 app = FastAPI(
@@ -51,6 +59,13 @@ def get_config() -> ConfigResponse:
         ollama_base_url_present=settings.ollama_base_url_present,
         ollama_model_present=settings.ollama_model_present,
         ollama_config_valid=settings.is_ollama_config_valid,
+        enable_local_stt=settings.enable_local_stt,
+        stt_provider=settings.stt_provider,
+        stt_model_size=settings.stt_model_size,
+        stt_device=settings.stt_device,
+        stt_compute_type=settings.stt_compute_type,
+        stt_audio_dir=settings.stt_audio_dir,
+        stt_max_duration_seconds=settings.stt_max_duration_seconds,
         env_file_exists=settings.env_file_exists,
         env_file_path=settings.env_file_path,
     )
@@ -66,20 +81,185 @@ def ollama_smoke_test() -> OllamaSmokeTestResponse:
     return OllamaSmokeTestResponse(**run_ollama_smoke_test())
 
 
+@app.get("/api/stt/smoke-test", response_model=STTSmokeTestResponse)
+def stt_smoke_test() -> STTSmokeTestResponse:
+    settings = get_settings()
+    yt_dlp_import_ok = importlib.util.find_spec("yt_dlp") is not None
+    faster_whisper_import_ok = importlib.util.find_spec("faster_whisper") is not None
+    ok = (
+        settings.is_local_stt_enabled
+        and settings.stt_provider == "faster_whisper"
+        and yt_dlp_import_ok
+        and faster_whisper_import_ok
+    )
+    if not settings.is_local_stt_enabled:
+        message = "Local STT is disabled."
+    elif ok:
+        message = "Local STT config is enabled and required imports are available."
+    else:
+        message = "Local STT is enabled but required imports are missing."
+
+    return STTSmokeTestResponse(
+        ok=ok,
+        stage="config",
+        enable_local_stt=settings.enable_local_stt,
+        stt_provider=settings.stt_provider,
+        stt_model_size=settings.stt_model_size,
+        stt_device=settings.stt_device,
+        stt_compute_type=settings.stt_compute_type,
+        message=message,
+        yt_dlp_import_ok=yt_dlp_import_ok,
+        faster_whisper_import_ok=faster_whisper_import_ok,
+    )
+
+
 @app.post("/api/videos/process", response_model=ProcessVideoResponse)
 def process_video(payload: ProcessVideoRequest) -> ProcessVideoResponse:
-    cleaned_transcript = clean_transcript(payload.transcript)
+    return process_transcript(
+        title=payload.title,
+        source_url=payload.source_url,
+        language=payload.language,
+        transcript=payload.transcript,
+    )
+
+
+@app.post("/api/videos/process-youtube", response_model=ProcessYouTubeVideoResponse)
+def process_youtube_video(payload: ProcessYouTubeVideoRequest):
+    try:
+        fetched = fetch_youtube_transcript(payload.source_url, payload.language)
+    except ValueError as exc:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "ok": False,
+                "reason": "invalid_youtube_url",
+                "message": str(exc),
+                "source_url": payload.source_url,
+            },
+        )
+    except TranscriptNotFoundError as exc:
+        if not payload.use_stt_fallback:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "ok": False,
+                    "reason": "transcript_not_found",
+                    "message": str(exc),
+                    "source_url": payload.source_url,
+                },
+            )
+
+        settings = get_settings()
+        if not settings.is_local_stt_enabled:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "ok": False,
+                    "reason": "local_stt_disabled",
+                    "message": "ไม่พบ subtitle/caption และ local STT ยังไม่ได้เปิดใช้งาน",
+                    "source_url": payload.source_url,
+                },
+            )
+
+        try:
+            audio = download_youtube_audio(
+                payload.source_url,
+                settings.stt_audio_dir,
+                settings.stt_max_duration_seconds,
+            )
+            stt_result = transcribe_audio(str(audio["audio_path"]), payload.language)
+        except AudioDownloadError as audio_exc:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "ok": False,
+                    "reason": "audio_download_failed",
+                    "message": str(audio_exc),
+                    "source_url": payload.source_url,
+                },
+            )
+        except LocalSTTError as stt_exc:
+            return JSONResponse(
+                status_code=422,
+                content={
+                    "ok": False,
+                    "reason": "local_stt_failed",
+                    "message": str(stt_exc),
+                    "source_url": payload.source_url,
+                },
+            )
+
+        youtube_video_id = str(audio["youtube_video_id"])
+        base_response = process_transcript(
+            title=payload.title or f"YouTube Video {youtube_video_id}",
+            source_url=payload.source_url,
+            language=payload.language,
+            transcript=str(stt_result["transcript"]),
+            extra_video_fields={
+                "transcript_source": "local_stt",
+                "youtube_video_id": youtube_video_id,
+                "transcript_language": str(stt_result.get("detected_language") or payload.language),
+                "transcript_is_generated": True,
+                "stt_provider": str(stt_result["stt_provider"]),
+                "stt_model_size": str(stt_result["stt_model_size"]),
+                "audio_source": str(audio["audio_source"]),
+                "audio_duration_seconds": audio.get("duration_seconds"),
+                "stt_duration_seconds": stt_result.get("duration_seconds"),
+            },
+        )
+
+        return ProcessYouTubeVideoResponse(
+            **base_response.model_dump(),
+            transcript_source="local_stt",
+            youtube_video_id=youtube_video_id,
+            transcript_language=str(stt_result.get("detected_language") or payload.language),
+            transcript_is_generated=True,
+            stt_provider=str(stt_result["stt_provider"]),
+            stt_model_size=str(stt_result["stt_model_size"]),
+        )
+
+    youtube_video_id = str(fetched["video_id"])
+    base_response = process_transcript(
+        title=payload.title or f"YouTube Video {youtube_video_id}",
+        source_url=payload.source_url,
+        language=payload.language,
+        transcript=str(fetched["transcript"]),
+        extra_video_fields={
+            "transcript_source": "youtube_caption",
+            "youtube_video_id": youtube_video_id,
+            "transcript_language": str(fetched["transcript_language"]),
+            "transcript_is_generated": bool(fetched["is_generated"]),
+        },
+    )
+
+    return ProcessYouTubeVideoResponse(
+        **base_response.model_dump(),
+        transcript_source="youtube_caption",
+        youtube_video_id=youtube_video_id,
+        transcript_language=str(fetched["transcript_language"]),
+        transcript_is_generated=bool(fetched["is_generated"]),
+    )
+
+
+def process_transcript(
+    title: str,
+    source_url: str | None,
+    language: str,
+    transcript: str,
+    extra_video_fields: dict | None = None,
+) -> ProcessVideoResponse:
+    cleaned_transcript = clean_transcript(transcript)
     chunks = chunk_transcript(cleaned_transcript)
-    summary_result = generate_summary_with_metadata(cleaned_transcript, chunks, payload.language)
+    summary_result = generate_summary_with_metadata(cleaned_transcript, chunks, language)
     summary = summary_result.summary
     video_id = str(uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
 
     video = {
         "video_id": video_id,
-        "title": payload.title,
-        "source_url": payload.source_url,
-        "language": payload.language,
+        "title": title,
+        "source_url": source_url,
+        "language": language,
         "cleaned_transcript": cleaned_transcript,
         "chunks": [chunk.model_dump() for chunk in chunks],
         "summary": summary,
@@ -87,13 +267,15 @@ def process_video(payload: ProcessVideoRequest) -> ProcessVideoResponse:
         "summary_fallback_used": summary_result.summary_fallback_used,
         "created_at": created_at,
     }
+    if extra_video_fields:
+        video.update(extra_video_fields)
     save_video(video)
 
     return ProcessVideoResponse(
         video_id=video_id,
-        title=payload.title,
-        source_url=payload.source_url,
-        language=payload.language,
+        title=title,
+        source_url=source_url,
+        language=language,
         cleaned_transcript=cleaned_transcript,
         chunks=chunks,
         summary=summary,

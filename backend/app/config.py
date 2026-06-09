@@ -16,6 +16,13 @@ class Settings:
     openai_model: str | None
     ollama_base_url: str | None
     ollama_model: str | None
+    enable_local_stt: bool
+    stt_provider: str
+    stt_model_size: str
+    stt_device: str
+    stt_compute_type: str
+    stt_audio_dir: str
+    stt_max_duration_seconds: int
     env_file_path: str
     env_file_exists: bool
 
@@ -63,6 +70,10 @@ class Settings:
     def should_use_ollama_summary(self) -> bool:
         return self.is_ollama_requested and self.is_ollama_config_valid
 
+    @property
+    def is_local_stt_enabled(self) -> bool:
+        return self.enable_local_stt
+
 
 def get_settings() -> Settings:
     env_file_values = _read_env_file(ENV_FILE)
@@ -79,6 +90,17 @@ def get_settings() -> Settings:
             _get_config_value("OLLAMA_BASE_URL", env_file_values, "http://localhost:11434")
         ),
         ollama_model=_empty_to_none(_get_config_value("OLLAMA_MODEL", env_file_values)),
+        enable_local_stt=_to_bool(_get_config_value("ENABLE_LOCAL_STT", env_file_values, "false")),
+        stt_provider=_get_config_value("STT_PROVIDER", env_file_values, "faster_whisper") or "faster_whisper",
+        stt_model_size=_get_config_value("STT_MODEL_SIZE", env_file_values, "base") or "base",
+        stt_device=_get_config_value("STT_DEVICE", env_file_values, "cpu") or "cpu",
+        stt_compute_type=_get_config_value("STT_COMPUTE_TYPE", env_file_values, "int8") or "int8",
+        stt_audio_dir=_get_config_value("STT_AUDIO_DIR", env_file_values, "backend/data/audio")
+        or "backend/data/audio",
+        stt_max_duration_seconds=_to_int(
+            _get_config_value("STT_MAX_DURATION_SECONDS", env_file_values, "900"),
+            default=900,
+        ),
         env_file_path=str(ENV_FILE),
         env_file_exists=ENV_FILE.exists(),
     )
@@ -126,3 +148,16 @@ def _normalize_base_url(value: str | None) -> str | None:
         return None
 
     return normalized.rstrip("/")
+
+
+def _to_bool(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _to_int(value: str | None, default: int) -> int:
+    try:
+        parsed = int((value or "").strip())
+    except ValueError:
+        return default
+
+    return parsed if parsed > 0 else default

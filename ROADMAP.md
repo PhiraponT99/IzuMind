@@ -40,6 +40,7 @@ Personal Knowledge Base
 - [x] V2.1.1 Config restructure and .env support
 - [x] V2.1.2 OpenAI provider debug and .env-first config restructure
 - [x] V2.2 Ollama local LLM provider
+- [x] V2.3 YouTube Caption Fetcher
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -64,8 +65,8 @@ Personal Knowledge Base
 
 ## 6. Phase 3: Transcript Acquisition
 
-- Auto-fetch YouTube transcript when available
-- Preserve manual transcript fallback
+- [x] Auto-fetch YouTube transcript when captions are available
+- [x] Preserve manual transcript fallback
 - Handle unavailable/private/restricted content safely
 - Do not bypass access controls
 

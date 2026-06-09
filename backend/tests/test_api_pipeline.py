@@ -35,6 +35,13 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+    monkeypatch.delenv("ENABLE_LOCAL_STT", raising=False)
+    monkeypatch.delenv("STT_PROVIDER", raising=False)
+    monkeypatch.delenv("STT_MODEL_SIZE", raising=False)
+    monkeypatch.delenv("STT_DEVICE", raising=False)
+    monkeypatch.delenv("STT_COMPUTE_TYPE", raising=False)
+    monkeypatch.delenv("STT_AUDIO_DIR", raising=False)
+    monkeypatch.delenv("STT_MAX_DURATION_SECONDS", raising=False)
     try:
         yield TestClient(app)
     finally:
@@ -68,6 +75,13 @@ def test_process_ask_and_markdown_export_pipeline(client: TestClient) -> None:
     assert config_body["ollama_base_url_present"] is True
     assert config_body["ollama_model_present"] is False
     assert config_body["ollama_config_valid"] is False
+    assert config_body["enable_local_stt"] is False
+    assert config_body["stt_provider"] == "faster_whisper"
+    assert config_body["stt_model_size"] == "base"
+    assert config_body["stt_device"] == "cpu"
+    assert config_body["stt_compute_type"] == "int8"
+    assert config_body["stt_audio_dir"] == "backend/data/audio"
+    assert config_body["stt_max_duration_seconds"] == 900
     assert config_body["env_file_exists"] is False
     assert config_body["env_file_path"].endswith(".missing-test-env")
     assert "OPENAI_API_KEY" not in config_response.text
@@ -111,6 +125,181 @@ def test_process_ask_and_markdown_export_pipeline(client: TestClient) -> None:
     assert "## Action Items" in markdown_text
     assert "## Questions to Think" in markdown_text
     assert "## Transcript Chunks" in markdown_text
+
+
+def test_process_youtube_success_uses_mocked_caption_fetcher(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_fetch_youtube_transcript(source_url: str, language: str = "thai") -> dict:
+        return {
+            "video_id": "abc123XYZ_9",
+            "transcript": "00:01 deep work is focused work 00:05 notification makes focus harder",
+            "transcript_language": "en",
+            "transcript_source": "youtube_caption",
+            "is_generated": False,
+        }
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
+
+    response = client.post(
+        "/api/videos/process-youtube",
+        json={
+            "source_url": "https://www.youtube.com/watch?v=abc123XYZ_9",
+            "language": "english",
+            "title": "YouTube Caption Test",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["video_id"]
+    assert body["title"] == "YouTube Caption Test"
+    assert body["source_url"] == "https://www.youtube.com/watch?v=abc123XYZ_9"
+    assert body["transcript_source"] == "youtube_caption"
+    assert body["youtube_video_id"] == "abc123XYZ_9"
+    assert body["transcript_language"] == "en"
+    assert body["transcript_is_generated"] is False
+    assert body["cleaned_transcript"]
+    assert body["chunks"]
+    assert body["summary"]
+    assert body["summary_provider"] == "rule_based"
+
+
+def test_process_youtube_transcript_not_found_returns_readable_failure(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_fetch_youtube_transcript(source_url: str, language: str = "thai") -> dict:
+        raise main_app.TranscriptNotFoundError(
+            "ไม่พบ subtitle/caption สำหรับวิดีโอนี้ กรุณาวาง transcript เองผ่าน /api/videos/process"
+        )
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
+
+    response = client.post(
+        "/api/videos/process-youtube",
+        json={
+            "source_url": "https://www.youtube.com/watch?v=abc123XYZ_9",
+            "language": "thai",
+        },
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["ok"] is False
+    assert body["reason"] == "transcript_not_found"
+    assert body["source_url"] == "https://www.youtube.com/watch?v=abc123XYZ_9"
+    assert "/api/videos/process" in body["message"]
+
+
+def test_process_youtube_stt_fallback_disabled_returns_readable_failure(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_fetch_youtube_transcript(source_url: str, language: str = "thai") -> dict:
+        raise main_app.TranscriptNotFoundError("caption missing")
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
+
+    response = client.post(
+        "/api/videos/process-youtube",
+        json={
+            "source_url": "https://www.youtube.com/watch?v=abc123XYZ_9",
+            "language": "thai",
+            "use_stt_fallback": True,
+        },
+    )
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["ok"] is False
+    assert body["reason"] == "local_stt_disabled"
+    assert body["source_url"] == "https://www.youtube.com/watch?v=abc123XYZ_9"
+
+
+def test_process_youtube_stt_fallback_success_uses_mocked_services(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_dir = _make_test_dir()
+    _patch_test_storage(test_dir, monkeypatch)
+    monkeypatch.setattr(config, "ENV_FILE", config.PROJECT_ROOT / ".missing-test-env")
+    monkeypatch.setenv("SUMMARY_PROVIDER", "rule_based")
+    monkeypatch.setenv("ENABLE_LOCAL_STT", "true")
+    monkeypatch.setenv("STT_AUDIO_DIR", str(test_dir / "audio"))
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OLLAMA_MODEL", raising=False)
+
+    def fake_fetch_youtube_transcript(source_url: str, language: str = "thai") -> dict:
+        raise main_app.TranscriptNotFoundError("caption missing")
+
+    def fake_download_youtube_audio(
+        source_url: str,
+        output_dir: str,
+        max_duration_seconds: int,
+    ) -> dict:
+        return {
+            "youtube_video_id": "abc123XYZ_9",
+            "audio_path": str(test_dir / "audio" / "abc123XYZ_9.m4a"),
+            "duration_seconds": 120,
+            "audio_source": "youtube_audio",
+        }
+
+    def fake_transcribe_audio(audio_path: str, language: str = "thai") -> dict:
+        return {
+            "transcript": "deep work needs focus and notification should be off",
+            "transcript_source": "local_stt",
+            "stt_provider": "faster_whisper",
+            "stt_model_size": "base",
+            "detected_language": "en",
+            "duration_seconds": 118.0,
+        }
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
+    monkeypatch.setattr(main_app, "download_youtube_audio", fake_download_youtube_audio)
+    monkeypatch.setattr(main_app, "transcribe_audio", fake_transcribe_audio)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/videos/process-youtube",
+            json={
+                "source_url": "https://www.youtube.com/watch?v=abc123XYZ_9",
+                "language": "english",
+                "title": "YouTube STT Test",
+                "use_stt_fallback": True,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["title"] == "YouTube STT Test"
+        assert body["transcript_source"] == "local_stt"
+        assert body["youtube_video_id"] == "abc123XYZ_9"
+        assert body["transcript_language"] == "en"
+        assert body["transcript_is_generated"] is True
+        assert body["stt_provider"] == "faster_whisper"
+        assert body["stt_model_size"] == "base"
+        assert body["summary_provider"] == "rule_based"
+        assert body["chunks"]
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_stt_smoke_test_returns_config_only(client: TestClient) -> None:
+    response = client.get("/api/stt/smoke-test")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["stage"] == "config"
+    assert body["enable_local_stt"] is False
+    assert body["stt_provider"] == "faster_whisper"
+    assert body["stt_model_size"] == "base"
+    assert body["stt_device"] == "cpu"
+    assert body["stt_compute_type"] == "int8"
+    assert "yt_dlp_import_ok" in body
+    assert "faster_whisper_import_ok" in body
 
 
 def test_openai_smoke_test_without_config_returns_safe_config_failure(

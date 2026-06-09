@@ -20,6 +20,10 @@ V2.1.2 adds safe OpenAI debug visibility with `GET /api/config` and a minimal `G
 
 V2.2 adds optional Ollama-powered local LLM summarization using the local Ollama chat API. The default remains `rule_based`, and Ollama failures fall back to the rule-based summarizer.
 
+V2.3 adds a YouTube caption fetcher endpoint for videos with available subtitles/captions. It does not download audio or transcribe speech.
+
+V2.4 adds an optional local speech-to-text fallback with `yt-dlp` and `faster-whisper`. Captions are still tried first, and STT runs only when explicitly enabled.
+
 ## Project Structure
 
 ```text
@@ -38,6 +42,9 @@ backend/
       summarizer.py
       transcript_cleaner.py
       transcript_chunker.py
+      youtube_audio_downloader.py
+      youtube_caption_fetcher.py
+      youtube_utils.py
     storage/
       __init__.py
       video_store.py
@@ -186,6 +193,13 @@ The response never returns the API key:
   "ollama_base_url_present": true,
   "ollama_model_present": true,
   "ollama_config_valid": true,
+  "enable_local_stt": false,
+  "stt_provider": "faster_whisper",
+  "stt_model_size": "base",
+  "stt_device": "cpu",
+  "stt_compute_type": "int8",
+  "stt_audio_dir": "backend/data/audio",
+  "stt_max_duration_seconds": 900,
   "env_file_exists": true,
   "env_file_path": "D:\\Codex\\izuna-video-lab\\.env"
 }
@@ -277,6 +291,112 @@ Expected fallback:
 ```
 
 If `/api/config` is valid but `/api/llm/ollama/smoke-test` fails, check that Ollama is running at `OLLAMA_BASE_URL` and that `OLLAMA_MODEL` is installed.
+
+## V2.3 YouTube Caption Fetcher
+
+`POST /api/videos/process-youtube` lets you process a YouTube URL when captions or subtitles are available.
+
+Important limits:
+
+- This only works when YouTube captions/subtitles are available.
+- It does not download audio.
+- It does not transcribe speech.
+- If captions are missing, disabled, blocked, or unavailable for the requested language, use manual transcript mode with `POST /api/videos/process`.
+
+Example request:
+
+```json
+{
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+  "language": "thai",
+  "title": "Optional title"
+}
+```
+
+The response uses the same shape as `POST /api/videos/process` and adds:
+
+```json
+{
+  "transcript_source": "youtube_caption",
+  "youtube_video_id": "VIDEO_ID",
+  "transcript_language": "th",
+  "transcript_is_generated": false
+}
+```
+
+If captions are unavailable, the endpoint returns a readable failure:
+
+```json
+{
+  "ok": false,
+  "reason": "transcript_not_found",
+  "message": "ไม่พบ subtitle/caption สำหรับวิดีโอนี้ กรุณาวาง transcript เองผ่าน /api/videos/process",
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID"
+}
+```
+
+## V2.4 Local Speech-to-Text Fallback
+
+Local STT is optional. `POST /api/videos/process-youtube` always tries YouTube captions first. It only downloads audio and runs local speech-to-text when:
+
+- request body has `use_stt_fallback: true`
+- `.env` has `ENABLE_LOCAL_STT=true`
+
+Use this only for videos you own or are permitted to process.
+
+Install Python dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Install `ffmpeg` separately on the machine. `yt-dlp` needs it for audio extraction. The first `faster-whisper` run may download a Whisper model.
+
+Example `.env`:
+
+```text
+ENABLE_LOCAL_STT=true
+STT_PROVIDER=faster_whisper
+STT_MODEL_SIZE=base
+STT_DEVICE=cpu
+STT_COMPUTE_TYPE=int8
+STT_AUDIO_DIR=backend/data/audio
+STT_MAX_DURATION_SECONDS=900
+```
+
+Check safe config:
+
+```text
+GET /api/config
+```
+
+Check STT readiness without downloading YouTube audio or loading a model:
+
+```text
+GET /api/stt/smoke-test
+```
+
+Example request:
+
+```json
+{
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+  "language": "thai",
+  "title": "YouTube STT Test",
+  "use_stt_fallback": true
+}
+```
+
+If captions are missing and local STT is disabled, the endpoint returns:
+
+```json
+{
+  "ok": false,
+  "reason": "local_stt_disabled",
+  "message": "ไม่พบ subtitle/caption และ local STT ยังไม่ได้เปิดใช้งาน",
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID"
+}
+```
 
 ## Debugging OpenAI Integration
 
@@ -424,6 +544,8 @@ The regression tests cover:
 - Optional LLM config fallback behavior
 - Summary provider smoke-test metadata
 - Safe OpenAI config and smoke-test debug endpoints
+- YouTube URL parsing and mocked YouTube caption processing
+- Local STT fallback config and mocked STT processing
 
 ## Test Transcript Processing
 

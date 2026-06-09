@@ -29,6 +29,29 @@ class ProcessVideoRequest(BaseModel):
         return normalized or None
 
 
+class ProcessYouTubeVideoRequest(BaseModel):
+    source_url: str = Field(..., min_length=1)
+    language: Language
+    title: str | None = None
+    use_stt_fallback: bool = False
+
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_not_be_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Source URL must not be empty.")
+        return value.strip()
+
+    @field_validator("title")
+    @classmethod
+    def normalize_optional_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        normalized = value.strip()
+        return normalized or None
+
+
 class TranscriptChunk(BaseModel):
     chunk_index: int
     text: str
@@ -57,6 +80,15 @@ class ProcessVideoResponse(BaseModel):
     summary: Summary
     summary_provider: SummaryProvider
     summary_fallback_used: bool
+
+
+class ProcessYouTubeVideoResponse(ProcessVideoResponse):
+    transcript_source: Literal["youtube_caption", "local_stt"]
+    youtube_video_id: str
+    transcript_language: str
+    transcript_is_generated: bool
+    stt_provider: str | None = None
+    stt_model_size: str | None = None
 
 
 class AskVideoRequest(BaseModel):
@@ -96,6 +128,13 @@ class ConfigResponse(BaseModel):
     ollama_base_url_present: bool
     ollama_model_present: bool
     ollama_config_valid: bool
+    enable_local_stt: bool
+    stt_provider: str
+    stt_model_size: str
+    stt_device: str
+    stt_compute_type: str
+    stt_audio_dir: str
+    stt_max_duration_seconds: int
     env_file_exists: bool
     env_file_path: str
 
@@ -118,3 +157,16 @@ class OllamaSmokeTestResponse(BaseModel):
     ollama_model: str | None = None
     model: str | None = None
     output_preview: str | None = None
+
+
+class STTSmokeTestResponse(BaseModel):
+    ok: bool
+    stage: Literal["config"]
+    enable_local_stt: bool
+    stt_provider: str
+    stt_model_size: str
+    stt_device: str
+    stt_compute_type: str
+    message: str
+    yt_dlp_import_ok: bool
+    faster_whisper_import_ok: bool

@@ -256,9 +256,16 @@ def test_process_youtube_stt_fallback_success_uses_mocked_services(
             "duration_seconds": 118.0,
         }
 
+    delete_called_with = None
+
+    def fake_delete_audio_file(file_path: str | None) -> None:
+        nonlocal delete_called_with
+        delete_called_with = file_path
+
     monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
     monkeypatch.setattr(main_app, "download_youtube_audio", fake_download_youtube_audio)
     monkeypatch.setattr(main_app, "transcribe_audio", fake_transcribe_audio)
+    monkeypatch.setattr(main_app, "delete_audio_file", fake_delete_audio_file)
 
     try:
         client = TestClient(app)
@@ -283,6 +290,66 @@ def test_process_youtube_stt_fallback_success_uses_mocked_services(
         assert body["stt_model_size"] == "base"
         assert body["summary_provider"] == "rule_based"
         assert body["chunks"]
+        assert delete_called_with == str(test_dir / "audio" / "abc123XYZ_9.m4a")
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_process_youtube_stt_fallback_cleanup_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    test_dir = _make_test_dir()
+    _patch_test_storage(test_dir, monkeypatch)
+    monkeypatch.setattr(config, "ENV_FILE", config.PROJECT_ROOT / ".missing-test-env")
+    monkeypatch.setenv("SUMMARY_PROVIDER", "rule_based")
+    monkeypatch.setenv("ENABLE_LOCAL_STT", "true")
+    monkeypatch.setenv("STT_AUDIO_DIR", str(test_dir / "audio"))
+
+    def fake_fetch_youtube_transcript(source_url: str, language: str = "thai") -> dict:
+        raise main_app.TranscriptNotFoundError("caption missing")
+
+    def fake_download_youtube_audio(
+        source_url: str,
+        output_dir: str,
+        max_duration_seconds: int,
+    ) -> dict:
+        return {
+            "youtube_video_id": "abc123XYZ_9",
+            "audio_path": str(test_dir / "audio" / "abc123XYZ_9.m4a"),
+            "duration_seconds": 120,
+            "audio_source": "youtube_audio",
+        }
+
+    def fake_transcribe_audio_fail(audio_path: str, language: str = "thai") -> dict:
+        raise main_app.LocalSTTError("transcription error")
+
+    delete_called_with = None
+
+    def fake_delete_audio_file(file_path: str | None) -> None:
+        nonlocal delete_called_with
+        delete_called_with = file_path
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch_youtube_transcript)
+    monkeypatch.setattr(main_app, "download_youtube_audio", fake_download_youtube_audio)
+    monkeypatch.setattr(main_app, "transcribe_audio", fake_transcribe_audio_fail)
+    monkeypatch.setattr(main_app, "delete_audio_file", fake_delete_audio_file)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/videos/process-youtube",
+            json={
+                "source_url": "https://www.youtube.com/watch?v=abc123XYZ_9",
+                "language": "english",
+                "title": "YouTube STT Test",
+                "use_stt_fallback": True,
+            },
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["reason"] == "local_stt_failed"
+        assert delete_called_with == str(test_dir / "audio" / "abc123XYZ_9.m4a")
     finally:
         shutil.rmtree(test_dir, ignore_errors=True)
 

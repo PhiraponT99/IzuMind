@@ -30,7 +30,7 @@ from app.services.summary_provider import generate_summary_with_metadata
 from app.services.transcript_chunker import chunk_transcript
 from app.services.transcript_cleaner import clean_transcript
 from app.services.youtube_caption_fetcher import TranscriptNotFoundError, fetch_youtube_transcript
-from app.services.youtube_audio_downloader import AudioDownloadError, download_youtube_audio
+from app.services.youtube_audio_downloader import AudioDownloadError, delete_audio_file, download_youtube_audio
 from app.storage.video_store import get_video, list_videos, save_video
 
 app = FastAPI(
@@ -161,13 +161,19 @@ def process_youtube_video(payload: ProcessYouTubeVideoRequest):
                 },
             )
 
+        audio_path = None
         try:
-            audio = download_youtube_audio(
-                payload.source_url,
-                settings.stt_audio_dir,
-                settings.stt_max_duration_seconds,
-            )
-            stt_result = transcribe_audio(str(audio["audio_path"]), payload.language)
+            try:
+                audio = download_youtube_audio(
+                    payload.source_url,
+                    settings.stt_audio_dir,
+                    settings.stt_max_duration_seconds,
+                )
+                audio_path = str(audio["audio_path"])
+                stt_result = transcribe_audio(audio_path, payload.language)
+            finally:
+                if audio_path:
+                    delete_audio_file(audio_path)
         except AudioDownloadError as audio_exc:
             return JSONResponse(
                 status_code=422,

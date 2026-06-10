@@ -1,7 +1,10 @@
+import logging
 from pathlib import Path
 from typing import Any
 
 from app.services.youtube_utils import extract_youtube_video_id
+
+LOGGER = logging.getLogger(__name__)
 
 
 class AudioDownloadError(Exception):
@@ -93,3 +96,14 @@ def _safe_message(exc: Exception) -> str:
     if len(message) <= 180:
         return message
     return f"{message[:177].rstrip()}..."
+
+
+def delete_audio_file(file_path: str | None) -> None:
+    if not file_path:
+        return
+    try:
+        path = Path(file_path)
+        if path.exists() and path.is_file():
+            path.unlink()
+    except Exception as exc:
+        LOGGER.warning("Could not clean up temporary audio file %s: %s", file_path, exc)

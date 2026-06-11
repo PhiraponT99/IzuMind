@@ -1,0 +1,17 @@
+[
+  {
+    "job_id": "1c4af39a-001b-4794-aec9-dc6175b099b3",
+    "status": "failed",
+    "stage": "failed",
+    "progress_percent": 5,
+    "message": "Failed: ไม่พบ subtitle/caption สำหรับวิดีโอนี้ และไม่ได้เปิดใช้งาน STT fallback",
+    "source_url": "https://www.youtube.com/watch?v=test123",
+    "title": "Test Video",
+    "language": "thai",
+    "use_stt_fallback": false,
+    "video_id": null,
+    "error_message": "ไม่พบ subtitle/caption สำหรับวิดีโอนี้ และไม่ได้เปิดใช้งาน STT fallback",
+    "created_at": "2026-06-11T09:17:17.838819+00:00",
+    "updated_at": "2026-06-11T09:17:17.855729+00:00"
+  }
+]

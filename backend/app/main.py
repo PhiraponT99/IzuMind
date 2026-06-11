@@ -3,6 +3,7 @@ import importlib.util
 from uuid import uuid4
 
 from fastapi import FastAPI
+from fastapi import BackgroundTasks
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.responses import PlainTextResponse
@@ -36,6 +37,7 @@ from app.services.youtube_caption_fetcher import TranscriptNotFoundError, fetch_
 from app.services.youtube_audio_downloader import AudioDownloadError, delete_audio_file, download_youtube_audio
 from app.storage.video_store import get_video, list_videos, save_video
 import app.storage.job_store as job_store
+from app.services.job_processor import process_youtube_job
 
 app = FastAPI(
     title="izuna-video-lab",
@@ -338,13 +340,17 @@ def export_video_markdown(video_id: str) -> PlainTextResponse:
 
 
 @app.post("/api/videos/process-youtube-long", response_model=JobStatusResponse, status_code=202)
-def process_youtube_long(payload: ProcessYouTubeLongVideoRequest):
+def process_youtube_long(
+    payload: ProcessYouTubeLongVideoRequest,
+    background_tasks: BackgroundTasks,
+):
     job = job_store.create_job(
         source_url=payload.source_url,
         title=payload.title,
         language=payload.language,
         use_stt_fallback=payload.use_stt_fallback,
     )
+    background_tasks.add_task(process_youtube_job, job["job_id"])
     return JobStatusResponse(**job)
 
 

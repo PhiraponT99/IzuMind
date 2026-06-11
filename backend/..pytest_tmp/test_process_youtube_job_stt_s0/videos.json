@@ -1,0 +1,47 @@
+[
+  {
+    "video_id": "8fe02320-216e-4669-8b36-2999dde81a73",
+    "title": "Test Video",
+    "source_url": "https://www.youtube.com/watch?v=test123",
+    "language": "thai",
+    "cleaned_transcript": "ทำงานอย่างมีสมาธิ ไม่ถูกรบกวน",
+    "chunks": [
+      {
+        "chunk_index": 1,
+        "text": "ทำงานอย่างมีสมาธิ ไม่ถูกรบกวน",
+        "char_count": 29
+      }
+    ],
+    "summary": {
+      "tldr": "แนะนำให้ทำงานโดยมีสมาธิและไม่ถูกความวุ่นวายขัดขวาง",
+      "main_ideas": [
+        "การทำงานควรจะมีสมาธิ",
+        "ต้องการป้องกันการรบกวนในการทำงาน"
+      ],
+      "key_takeaways": [
+        "สมาธิในการทำงานเป็นสิ่งสำคัญ",
+        "ควรมีวินัยในเรื่องของการทำงานและการจำกัดความวุ่นวาย"
+      ],
+      "action_items": [
+        "ตั้งใจให้มากเมื่อทำงาน",
+        "มีวิธีการป้องกันความวุ่นวายจากการทำงานด้วยตนเองหรือใช้อุปกรณ์ที่เหมาะสม"
+      ],
+      "questions_to_think": [
+        "สมาธิดังกล่าวคืออะไรและควรจะทำอย่างไร?",
+        "มีวิธีไหนบ้างที่ช่วยในการจำกัดความวุ่นวายในระหว่างการทำงาน?"
+      ]
+    },
+    "summary_provider": "ollama",
+    "summary_fallback_used": false,
+    "created_at": "2026-06-11T09:17:23.960308+00:00",
+    "transcript_source": "local_stt",
+    "youtube_video_id": "stt123",
+    "transcript_language": "th",
+    "transcript_is_generated": true,
+    "stt_provider": "faster_whisper",
+    "stt_model_size": "base",
+    "audio_source": "youtube_audio",
+    "audio_duration_seconds": 120,
+    "stt_duration_seconds": 118.0
+  }
+]

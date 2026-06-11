@@ -9,6 +9,7 @@ import app.config as config
 import app.main as main_app
 import app.storage.video_store as video_store
 import app.storage.job_store as job_store
+import app.services.job_processor as job_processor
 from app.main import app
 
 
@@ -470,12 +471,23 @@ def test_ollama_provider_without_model_returns_fallback_metadata(
         shutil.rmtree(test_dir, ignore_errors=True)
 
 
-def test_long_video_job_lifecycle(client: TestClient) -> None:
+def test_long_video_job_lifecycle(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Mock the background processor so no real YouTube/STT work happens.
+    background_calls: list[str] = []
+
+    def fake_process_youtube_job(job_id: str) -> None:
+        background_calls.append(job_id)
+
+    monkeypatch.setattr(main_app, "process_youtube_job", fake_process_youtube_job)
+
     payload = {
         "source_url": "https://www.youtube.com/watch?v=long_video_id_123",
         "language": "thai",
         "title": "Long Video Test Case",
-        "use_stt_fallback": True
+        "use_stt_fallback": True,
     }
     post_response = client.post("/api/videos/process-youtube-long", json=payload)
     assert post_response.status_code == 202
@@ -495,6 +507,9 @@ def test_long_video_job_lifecycle(client: TestClient) -> None:
     assert job["updated_at"] is not None
 
     job_id = job["job_id"]
+
+    # TestClient runs BackgroundTasks synchronously — verify the task was called.
+    assert job_id in background_calls, "Background processor should have been scheduled"
 
     get_response = client.get(f"/api/jobs/{job_id}")
     assert get_response.status_code == 200

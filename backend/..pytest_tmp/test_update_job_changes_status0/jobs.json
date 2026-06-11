@@ -1,6 +1,6 @@
 [
   {
-    "job_id": "4f335bd2-739c-4a35-aba9-a22c63d7432a",
+    "job_id": "762e6b48-3d8d-4790-b6db-92229032b0b2",
     "status": "running",
     "stage": "caption_fetch",
     "progress_percent": 10,
@@ -11,7 +11,7 @@
     "use_stt_fallback": false,
     "video_id": null,
     "error_message": null,
-    "created_at": "2026-06-11T09:01:11.029249+00:00",
-    "updated_at": "2026-06-11T09:01:11.038860+00:00"
+    "created_at": "2026-06-11T09:17:24.093392+00:00",
+    "updated_at": "2026-06-11T09:17:24.106444+00:00"
   }
 ]

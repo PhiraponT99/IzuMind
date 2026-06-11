@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 import app.config as config
 import app.main as main_app
 import app.storage.video_store as video_store
+import app.storage.job_store as job_store
 from app.main import app
+
 
 THAI_DEEP_WORK_REQUEST = {
     "title": "Deep Work Test",
@@ -60,6 +62,10 @@ def _patch_test_storage(test_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(main_app, "save_video", video_store.save_video)
     monkeypatch.setattr(main_app, "get_video", video_store.get_video)
     monkeypatch.setattr(main_app, "list_videos", video_store.list_videos)
+
+    # Patch job store to avoid writing to real backend/data/jobs.json
+    monkeypatch.setattr(job_store, "DATA_DIR", test_dir)
+    monkeypatch.setattr(job_store, "JOBS_FILE", test_dir / "jobs.json")
 
 
 def test_process_ask_and_markdown_export_pipeline(client: TestClient) -> None:
@@ -462,3 +468,50 @@ def test_ollama_provider_without_model_returns_fallback_metadata(
         assert body["summary"]
     finally:
         shutil.rmtree(test_dir, ignore_errors=True)
+
+
+def test_long_video_job_lifecycle(client: TestClient) -> None:
+    payload = {
+        "source_url": "https://www.youtube.com/watch?v=long_video_id_123",
+        "language": "thai",
+        "title": "Long Video Test Case",
+        "use_stt_fallback": True
+    }
+    post_response = client.post("/api/videos/process-youtube-long", json=payload)
+    assert post_response.status_code == 202
+    job = post_response.json()
+    assert job["job_id"] is not None
+    assert job["status"] == "queued"
+    assert job["stage"] == "queued"
+    assert job["progress_percent"] == 0
+    assert "queued" in job["message"].lower()
+    assert job["source_url"] == payload["source_url"]
+    assert job["title"] == payload["title"]
+    assert job["language"] == payload["language"]
+    assert job["use_stt_fallback"] is True
+    assert job["video_id"] is None
+    assert job["error_message"] is None
+    assert job["created_at"] is not None
+    assert job["updated_at"] is not None
+
+    job_id = job["job_id"]
+
+    get_response = client.get(f"/api/jobs/{job_id}")
+    assert get_response.status_code == 200
+    get_job = get_response.json()
+    assert get_job["job_id"] == job_id
+    assert get_job["status"] == "queued"
+
+    list_response = client.get("/api/jobs")
+    assert list_response.status_code == 200
+    jobs_list = list_response.json()
+    assert len(jobs_list) >= 1
+    assert any(j["job_id"] == job_id for j in jobs_list)
+
+    missing_response = client.get("/api/jobs/non-existent-uuid")
+    assert missing_response.status_code == 404
+    missing_body = missing_response.json()
+    assert missing_body["ok"] is False
+    assert missing_body["reason"] == "job_not_found"
+    assert "ไม่พบ" in missing_body["message"]
+

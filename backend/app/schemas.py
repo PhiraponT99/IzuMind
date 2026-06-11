@@ -170,3 +170,50 @@ class STTSmokeTestResponse(BaseModel):
     message: str
     yt_dlp_import_ok: bool
     faster_whisper_import_ok: bool
+
+
+JobStatus = Literal["queued", "running", "completed", "failed", "cancelled"]
+JobStage = Literal["queued", "caption_fetch", "audio_download", "transcribing", "summarizing", "saving", "completed", "failed"]
+
+
+class ProcessYouTubeLongVideoRequest(BaseModel):
+    source_url: str = Field(..., min_length=1)
+    language: Language
+    title: str | None = None
+    use_stt_fallback: bool = False
+
+    @field_validator("source_url")
+    @classmethod
+    def source_url_must_not_be_blank(cls, value: str) -> str:
+        if not value or not value.strip():
+            raise ValueError("Source URL must not be empty.")
+        return value.strip()
+
+    @field_validator("title")
+    @classmethod
+    def normalize_optional_title(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class JobStatusResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    stage: JobStage
+    progress_percent: int
+    message: str
+    source_url: str
+    title: str | None = None
+    language: str
+    use_stt_fallback: bool
+    video_id: str | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class JobListResponse(BaseModel):
+    jobs: list[JobStatusResponse]
+

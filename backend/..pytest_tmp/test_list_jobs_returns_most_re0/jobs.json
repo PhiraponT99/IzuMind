@@ -1,0 +1,47 @@
+[
+  {
+    "job_id": "cc8508ad-3cc7-4d53-b467-90ec7eac838e",
+    "status": "queued",
+    "stage": "queued",
+    "progress_percent": 0,
+    "message": "Long video processing has been queued. Real background processing will be implemented later.",
+    "source_url": "https://youtube.com/watch?v=A",
+    "title": "A",
+    "language": "thai",
+    "use_stt_fallback": false,
+    "video_id": null,
+    "error_message": null,
+    "created_at": "2026-06-11T09:01:11.085272+00:00",
+    "updated_at": "2026-06-11T09:01:11.085272+00:00"
+  },
+  {
+    "job_id": "c25a6048-c356-443b-bfec-b4d93474a3a3",
+    "status": "queued",
+    "stage": "queued",
+    "progress_percent": 0,
+    "message": "Long video processing has been queued. Real background processing will be implemented later.",
+    "source_url": "https://youtube.com/watch?v=B",
+    "title": "B",
+    "language": "thai",
+    "use_stt_fallback": false,
+    "video_id": null,
+    "error_message": null,
+    "created_at": "2026-06-11T09:01:11.085705+00:00",
+    "updated_at": "2026-06-11T09:01:11.085705+00:00"
+  },
+  {
+    "job_id": "ab3fd5f0-549e-4341-b6d8-648f918f1994",
+    "status": "queued",
+    "stage": "queued",
+    "progress_percent": 0,
+    "message": "Long video processing has been queued. Real background processing will be implemented later.",
+    "source_url": "https://youtube.com/watch?v=C",
+    "title": "C",
+    "language": "thai",
+    "use_stt_fallback": false,
+    "video_id": null,
+    "error_message": null,
+    "created_at": "2026-06-11T09:01:11.094966+00:00",
+    "updated_at": "2026-06-11T09:01:11.094966+00:00"
+  }
+]

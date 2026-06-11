@@ -41,6 +41,8 @@ Personal Knowledge Base
 - [x] V2.1.2 OpenAI provider debug and .env-first config restructure
 - [x] V2.2 Ollama local LLM provider
 - [x] V2.3 YouTube Caption Fetcher
+- [x] V2.4 Local STT fallback with yt-dlp and faster-whisper
+- [x] V2.5 Long Video Processing Mode - Step 1 Job Skeleton
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -72,9 +74,18 @@ Personal Knowledge Base
 
 ## 7. Phase 4: Speech-to-Text Fallback
 
-- Add Whisper or another ASR option
-- Process uploaded audio/video
-- Store generated transcript
+- [x] Add yt-dlp audio download with duration guard
+- [x] Add faster-whisper local STT integration
+- [x] Clean up audio after STT
+- Process uploaded audio/video (future)
+- Store generated transcript (future)
+
+## 7.5 Phase 2.5: Long Video Processing Mode
+
+- [x] Step 1: Local JSON job store and job status API (skeleton)
+- [ ] Step 2: Background worker executing caption fetch + STT + summarise
+- [ ] Step 3: Progress updates during transcription
+- [ ] Step 4: Cancellation support
 
 ## 8. Phase 5: Searchable Knowledge Base
 

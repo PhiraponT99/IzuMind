@@ -20,6 +20,9 @@ from app.schemas import (
     ProcessYouTubeVideoResponse,
     STTSmokeTestResponse,
     VideoListItem,
+    ProcessYouTubeLongVideoRequest,
+    JobStatusResponse,
+    JobListResponse,
 )
 from app.services.llm_summarizer import run_openai_smoke_test
 from app.services.local_stt import LocalSTTError, transcribe_audio
@@ -32,6 +35,7 @@ from app.services.transcript_cleaner import clean_transcript
 from app.services.youtube_caption_fetcher import TranscriptNotFoundError, fetch_youtube_transcript
 from app.services.youtube_audio_downloader import AudioDownloadError, delete_audio_file, download_youtube_audio
 from app.storage.video_store import get_video, list_videos, save_video
+import app.storage.job_store as job_store
 
 app = FastAPI(
     title="izuna-video-lab",
@@ -331,3 +335,37 @@ def export_video_markdown(video_id: str) -> PlainTextResponse:
         content=markdown,
         media_type="text/markdown; charset=utf-8",
     )
+
+
+@app.post("/api/videos/process-youtube-long", response_model=JobStatusResponse, status_code=202)
+def process_youtube_long(payload: ProcessYouTubeLongVideoRequest):
+    job = job_store.create_job(
+        source_url=payload.source_url,
+        title=payload.title,
+        language=payload.language,
+        use_stt_fallback=payload.use_stt_fallback,
+    )
+    return JobStatusResponse(**job)
+
+
+@app.get("/api/jobs/{job_id}")
+def get_job_endpoint(job_id: str):
+    job = job_store.get_job(job_id)
+    if job is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "ok": False,
+                "reason": "job_not_found",
+                "message": "ไม่พบ job_id นี้",
+            },
+        )
+    return JobStatusResponse(**job)
+
+
+@app.get("/api/jobs", response_model=list[JobStatusResponse])
+def list_jobs_endpoint(limit: int = 50):
+    clamped_limit = max(1, min(limit, 100))
+    jobs = job_store.list_jobs(limit=clamped_limit)
+    return [JobStatusResponse(**job) for job in jobs]
+

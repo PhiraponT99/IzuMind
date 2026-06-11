@@ -398,6 +398,58 @@ If captions are missing and local STT is disabled, the endpoint returns:
 }
 ```
 
+## V2.5 Long Video Job Skeleton
+
+For long YouTube videos where local STT or summarization might take too long to run synchronously, izuna-video-lab provides an asynchronous job-based processing architecture.
+
+- **Short Videos**: Continue using `POST /api/videos/process-youtube` for fast, synchronous caption fetching and processing.
+- **Long Videos**: Use `POST /api/videos/process-youtube-long` to enqueue a background job.
+- **Job Tracking**: Check the progress of a job at any time using `GET /api/jobs/{job_id}`.
+- **Note**: In this initial skeleton step, enqueuing a job only creates and stores a job record in `queued` status. Real background worker execution (ASR/STT/LLM) will be implemented in subsequent roadmap steps.
+
+### Example Request
+
+```json
+{
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+  "language": "thai",
+  "title": "Long Video Test",
+  "use_stt_fallback": true
+}
+```
+
+### Example Response (HTTP 202 Accepted)
+
+```json
+{
+  "job_id": "4b0b1bda-b2d9-4d6d-88f5-df6e885c3db6",
+  "status": "queued",
+  "stage": "queued",
+  "progress_percent": 0,
+  "message": "Long video processing has been queued. Real background processing will be implemented later.",
+  "source_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+  "title": "Long Video Test",
+  "language": "thai",
+  "use_stt_fallback": true,
+  "video_id": null,
+  "error_message": null,
+  "created_at": "2026-06-11T15:00:00+00:00",
+  "updated_at": "2026-06-11T15:00:00+00:00"
+}
+```
+
+### Retrieve Job Status
+
+```text
+GET /api/jobs/{job_id}
+```
+
+### List Recent Jobs
+
+```text
+GET /api/jobs?limit=50
+```
+
 ## Debugging OpenAI Integration
 
 Create local config from the project root:

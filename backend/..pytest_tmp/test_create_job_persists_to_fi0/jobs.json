@@ -1,0 +1,17 @@
+[
+  {
+    "job_id": "8aeef57a-74b1-4b32-916d-7373bdd388b7",
+    "status": "queued",
+    "stage": "queued",
+    "progress_percent": 0,
+    "message": "Long video processing has been queued. Real background processing will be implemented later.",
+    "source_url": "https://www.youtube.com/watch?v=abc",
+    "title": "Persistent Video",
+    "language": "thai",
+    "use_stt_fallback": false,
+    "video_id": null,
+    "error_message": null,
+    "created_at": "2026-06-11T09:01:10.999815+00:00",
+    "updated_at": "2026-06-11T09:01:10.999815+00:00"
+  }
+]

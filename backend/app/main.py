@@ -38,6 +38,7 @@ from app.services.youtube_audio_downloader import AudioDownloadError, delete_aud
 from app.storage.video_store import get_video, list_videos, save_video
 import app.storage.job_store as job_store
 from app.services.job_processor import process_youtube_job
+from app.services.transcript_quality import analyze_transcript_quality
 
 app = FastAPI(
     title="izuna-video-lab",
@@ -267,6 +268,14 @@ def process_transcript(
     video_id = str(uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
 
+    # Determine transcript source for quality analysis
+    _transcript_source = (extra_video_fields or {}).get("transcript_source")
+    quality_result = analyze_transcript_quality(
+        cleaned_transcript,
+        transcript_source=_transcript_source,
+        language=language,
+    )
+
     video = {
         "video_id": video_id,
         "title": title,
@@ -277,6 +286,9 @@ def process_transcript(
         "summary": summary,
         "summary_provider": summary_result.summary_provider,
         "summary_fallback_used": summary_result.summary_fallback_used,
+        "transcript_quality": quality_result["transcript_quality"],
+        "transcript_warnings": quality_result["warnings"],
+        "transcript_quality_signals": quality_result["quality_signals"],
         "created_at": created_at,
     }
     if extra_video_fields:
@@ -293,6 +305,9 @@ def process_transcript(
         summary=summary,
         summary_provider=summary_result.summary_provider,
         summary_fallback_used=summary_result.summary_fallback_used,
+        transcript_quality=quality_result["transcript_quality"],
+        transcript_warnings=quality_result["warnings"],
+        transcript_quality_signals=quality_result["quality_signals"],
     )
 
 

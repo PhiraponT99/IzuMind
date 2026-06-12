@@ -530,3 +530,143 @@ def test_long_video_job_lifecycle(
     assert missing_body["reason"] == "job_not_found"
     assert "ไม่พบ" in missing_body["message"]
 
+
+# ---------------------------------------------------------------------------
+# V2.6 — Transcript Quality Warning integration tests
+# ---------------------------------------------------------------------------
+
+
+def test_process_video_returns_quality_fields(client: TestClient) -> None:
+    """POST /api/videos/process must include transcript_quality, warnings, signals."""
+    response = client.post("/api/videos/process", json=THAI_DEEP_WORK_REQUEST)
+    assert response.status_code == 200
+    body = response.json()
+
+    assert "transcript_quality" in body
+    assert body["transcript_quality"] in ("high", "medium", "low")
+    assert "transcript_warnings" in body
+    assert isinstance(body["transcript_warnings"], list)
+    assert "transcript_quality_signals" in body
+    signals = body["transcript_quality_signals"]
+    assert signals is not None
+    assert "char_count" in signals
+    assert "thai_character_ratio" in signals
+
+
+def test_process_youtube_stt_response_includes_quality_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When process-youtube uses the STT path the response must include the STT quality warning."""
+    test_dir = _make_test_dir()
+    _patch_test_storage(test_dir, monkeypatch)
+    monkeypatch.setattr(config, "ENV_FILE", config.PROJECT_ROOT / ".missing-test-env")
+    monkeypatch.setenv("SUMMARY_PROVIDER", "rule_based")
+    monkeypatch.setenv("ENABLE_LOCAL_STT", "true")
+    monkeypatch.setenv("STT_AUDIO_DIR", str(test_dir / "audio"))
+
+    def fake_fetch(source_url: str, language: str = "thai") -> dict:
+        raise main_app.TranscriptNotFoundError("no captions")
+
+    def fake_download(source_url: str, output_dir: str, max_duration_seconds: int) -> dict:
+        return {
+            "youtube_video_id": "quality_stt_vid",
+            "audio_path": str(test_dir / "audio" / "quality_stt_vid.m4a"),
+            "duration_seconds": 90,
+            "audio_source": "youtube_audio",
+        }
+
+    def fake_transcribe(audio_path: str, language: str = "thai") -> dict:
+        return {
+            "transcript": (
+                "\u0e27\u0e31\u0e19\u0e19\u0e35\u0e49\u0e40\u0e23\u0e32\u0e08\u0e30\u0e1e\u0e39\u0e14\u0e16\u0e36\u0e07 deep work "
+                "deep work \u0e04\u0e37\u0e2d\u0e01\u0e32\u0e23\u0e17\u0e33\u0e07\u0e32\u0e19\u0e41\u0e1a\u0e1a\u0e21\u0e35\u0e2a\u0e21\u0e32\u0e18\u0e34\u0e25\u0e36\u0e01 "
+                "\u0e44\u0e21\u0e48\u0e16\u0e39\u0e01\u0e23\u0e1a\u0e01\u0e27\u0e19 notification social media "
+                "\u0e40\u0e21\u0e37\u0e48\u0e2d\u0e40\u0e23\u0e32\u0e40\u0e0a\u0e47\u0e01\u0e21\u0e37\u0e2d\u0e16\u0e37\u0e2d \u0e2a\u0e21\u0e2d\u0e07\u0e08\u0e30\u0e44\u0e14\u0e49\u0e23\u0e31\u0e1a dopamine "
+                "\u0e16\u0e49\u0e32\u0e2d\u0e22\u0e32\u0e01\u0e17\u0e33\u0e07\u0e32\u0e19\u0e25\u0e36\u0e01 \u0e40\u0e23\u0e32\u0e04\u0e27\u0e23\u0e1b\u0e34\u0e14 notification"
+            ),
+            "transcript_source": "local_stt",
+            "stt_provider": "faster_whisper",
+            "stt_model_size": "base",
+            "detected_language": "th",
+            "duration_seconds": 88.0,
+        }
+
+    def fake_delete(file_path: str | None) -> None:
+        pass
+
+    monkeypatch.setattr(main_app, "fetch_youtube_transcript", fake_fetch)
+    monkeypatch.setattr(main_app, "download_youtube_audio", fake_download)
+    monkeypatch.setattr(main_app, "transcribe_audio", fake_transcribe)
+    monkeypatch.setattr(main_app, "delete_audio_file", fake_delete)
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/videos/process-youtube",
+            json={
+                "source_url": "https://www.youtube.com/watch?v=quality_stt_vid",
+                "language": "thai",
+                "title": "Quality Warning Test",
+                "use_stt_fallback": True,
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert "transcript_quality" in body
+        assert isinstance(body["transcript_warnings"], list)
+        stt_warnings = [w for w in body["transcript_warnings"] if "STT" in w]
+        assert stt_warnings, "Expected at least one STT quality warning"
+    finally:
+        shutil.rmtree(test_dir, ignore_errors=True)
+
+
+
+def test_markdown_export_includes_quality_warning_block(client: TestClient) -> None:
+    """Markdown export must include a warning block when transcript_warnings are present."""
+    # Process a video first
+    response = client.post("/api/videos/process", json=THAI_DEEP_WORK_REQUEST)
+    assert response.status_code == 200
+    video_id = response.json()["video_id"]
+
+    # Overwrite the record in-place so get_video returns the updated version.
+    # save_video always appends; _write_videos replaces the full list.
+    import app.storage.video_store as vs
+    all_videos = vs.list_videos()
+    for v in all_videos:
+        if v.get("video_id") == video_id:
+            v["transcript_quality"] = "medium"
+            v["transcript_warnings"] = [
+                "Transcript generated by local STT. Some words may be inaccurate."
+            ]
+            break
+    vs._write_videos(all_videos)
+
+    md_response = client.get(f"/api/videos/{video_id}/export/markdown")
+    assert md_response.status_code == 200
+    md = md_response.text
+
+    assert "⚠️" in md or "หมายเหตุ" in md
+    assert "STT" in md or "inaccurate" in md
+
+
+
+def test_markdown_export_no_warning_block_for_high_quality(client: TestClient) -> None:
+    """Markdown export must NOT include a warning block for high-quality transcripts."""
+    response = client.post("/api/videos/process", json=THAI_DEEP_WORK_REQUEST)
+    assert response.status_code == 200
+    video_id = response.json()["video_id"]
+
+    import app.storage.video_store as vs
+    video = vs.get_video(video_id)
+    assert video is not None
+    video["transcript_quality"] = "high"
+    video["transcript_warnings"] = []
+    vs.save_video(video)
+
+    md_response = client.get(f"/api/videos/{video_id}/export/markdown")
+    assert md_response.status_code == 200
+    md = md_response.text
+
+    # No warning noise in clean export
+    assert "⚠️" not in md
+    assert "Transcript quality:" not in md

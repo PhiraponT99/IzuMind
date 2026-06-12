@@ -43,6 +43,8 @@ Personal Knowledge Base
 - [x] V2.3 YouTube Caption Fetcher
 - [x] V2.4 Local STT fallback with yt-dlp and faster-whisper
 - [x] V2.5 Long Video Processing Mode - Step 1 Job Skeleton
+- [x] V2.5 Long Video Processing Mode - Step 2 In-process Background Worker
+- [x] V2.6 Transcript Quality Warning - Step 1
 
 ## 4. Phase 1: Manual Transcript MVP
 
@@ -83,9 +85,13 @@ Personal Knowledge Base
 ## 7.5 Phase 2.5: Long Video Processing Mode
 
 - [x] Step 1: Local JSON job store and job status API (skeleton)
-- [ ] Step 2: Background worker executing caption fetch + STT + summarise
+- [x] Step 2: Background worker executing caption fetch + STT + summarise
 - [ ] Step 3: Progress updates during transcription
 - [ ] Step 4: Cancellation support
+
+## 7.6 Phase 2.6: Transcript Quality Warning
+
+- [x] Step 1: Deterministic quality analyser, API warnings, Markdown export block
 
 ## 8. Phase 5: Searchable Knowledge Base
 

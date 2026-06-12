@@ -1,6 +1,6 @@
 [
   {
-    "video_id": "9c2172d4-4209-4af8-8f7a-052d1a229cad",
+    "video_id": "29b70b76-578e-48dd-b38d-3cbc5957bd52",
     "title": "Test Video",
     "source_url": "https://www.youtube.com/watch?v=test123",
     "language": "thai",
@@ -13,21 +13,35 @@
       }
     ],
     "summary": {
-      "tldr": "深工作是无干扰的专注工作",
+      "tldr": "深工作是指没有干扰的专注工作",
       "main_ideas": [
-        "深工作的定义"
+        "深工作是专注于工作的状态"
       ],
       "key_takeaways": [
-        "深工作是一种专注于任务而不受干扰的状态"
+        "深工作意味着排除干扰，全神贯注于手头的任务"
       ],
-      "action_items": [],
+      "action_items": [
+        "识别并关闭可能打扰的设备和通知"
+      ],
       "questions_to_think": [
-        "深工作中有哪些具体的策略可以用来提高效率？"
+        "如何在日常生活中更有效地进行深工作？"
       ]
     },
     "summary_provider": "ollama",
     "summary_fallback_used": false,
-    "created_at": "2026-06-11T09:17:17.806580+00:00",
+    "transcript_quality": "low",
+    "transcript_warnings": [
+      "Transcript is too short to assess quality reliably."
+    ],
+    "transcript_quality_signals": {
+      "char_count": 45,
+      "unusual_character_ratio": 0.0,
+      "latin_character_ratio": 0.0,
+      "thai_character_ratio": 0.0,
+      "replacement_character_count": 0,
+      "repeated_phrase_detected": false
+    },
+    "created_at": "2026-06-11T16:27:19.775096+00:00",
     "transcript_source": "youtube_caption",
     "youtube_video_id": "cap123",
     "transcript_language": "en",

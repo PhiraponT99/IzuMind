@@ -12,6 +12,15 @@ def export_video_to_markdown(video: dict) -> str:
         f"Language: {_text(video.get('language'), 'unknown')}",
         f"Created at: {_text(video.get('created_at'), 'unknown')}",
         "",
+    ]
+
+    # --- Transcript quality warning block (emitted only when relevant) ---
+    quality_lines = _format_quality_block(video)
+    if quality_lines:
+        lines.extend(quality_lines)
+        lines.append("")
+
+    lines += [
         "## TL;DR",
         "",
         _text(summary.get("tldr"), "No TL;DR available."),
@@ -76,3 +85,34 @@ def _text(value: Any, fallback: str) -> str:
 
     normalized = str(value).strip()
     return normalized or fallback
+
+
+def _format_quality_block(video: dict) -> list[str]:
+    """
+    Return a list of markdown lines for the quality warning block,
+    or an empty list if there is nothing worth surfacing.
+
+    Emitted only when:
+    * transcript_quality is "medium" or "low", OR
+    * transcript_warnings is non-empty.
+    """
+    quality: str | None = video.get("transcript_quality")
+    warnings: list = video.get("transcript_warnings") or []
+
+    # Nothing to show for high-quality transcripts with no warnings
+    if quality == "high" and not warnings:
+        return []
+    if quality is None and not warnings:
+        return []
+
+    lines: list[str] = []
+
+    if quality and quality != "high":
+        lines.append(f"> Transcript quality: **{quality}**")
+
+    for warning in warnings:
+        # Render each warning as a blockquote note
+        lines.append(f"> ⚠️ หมายเหตุ: {warning}")
+
+    return lines
+

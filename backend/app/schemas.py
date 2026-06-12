@@ -80,6 +80,9 @@ class ProcessVideoResponse(BaseModel):
     summary: Summary
     summary_provider: SummaryProvider
     summary_fallback_used: bool
+    transcript_quality: str | None = None
+    transcript_warnings: list[str] = []
+    transcript_quality_signals: dict | None = None
 
 
 class ProcessYouTubeVideoResponse(ProcessVideoResponse):

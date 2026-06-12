@@ -1,6 +1,6 @@
 [
   {
-    "job_id": "1c4af39a-001b-4794-aec9-dc6175b099b3",
+    "job_id": "c7cbdd19-b2e1-404d-bb5a-7dce7e11c646",
     "status": "failed",
     "stage": "failed",
     "progress_percent": 5,
@@ -11,7 +11,7 @@
     "use_stt_fallback": false,
     "video_id": null,
     "error_message": "ไม่พบ subtitle/caption สำหรับวิดีโอนี้ และไม่ได้เปิดใช้งาน STT fallback",
-    "created_at": "2026-06-11T09:17:17.838819+00:00",
-    "updated_at": "2026-06-11T09:17:17.855729+00:00"
+    "created_at": "2026-06-11T16:27:19.809020+00:00",
+    "updated_at": "2026-06-11T16:27:19.825225+00:00"
   }
 ]

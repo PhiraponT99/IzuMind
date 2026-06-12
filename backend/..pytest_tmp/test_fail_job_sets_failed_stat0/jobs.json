@@ -1,6 +1,6 @@
 [
   {
-    "job_id": "23bac548-e2c5-496a-bfba-e69e6381d6d0",
+    "job_id": "854b48d8-e41b-4964-8296-b1ad73544d94",
     "status": "failed",
     "stage": "failed",
     "progress_percent": 0,
@@ -11,7 +11,7 @@
     "use_stt_fallback": true,
     "video_id": null,
     "error_message": "STT crashed",
-    "created_at": "2026-06-11T09:17:24.147551+00:00",
-    "updated_at": "2026-06-11T09:17:24.156268+00:00"
+    "created_at": "2026-06-11T16:27:25.852064+00:00",
+    "updated_at": "2026-06-11T16:27:25.864485+00:00"
   }
 ]
